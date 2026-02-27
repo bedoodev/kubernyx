@@ -1,0 +1,122 @@
+.summary-section {
+  margin-bottom: 28px;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.card-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.card-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-weight: 500;
+}
+
+.readiness-bar-container {
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.readiness-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.readiness-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.readiness-total {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.readiness-track {
+  display: flex;
+  height: 12px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.readiness-segment {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.readiness-segment.ready {
+  background: var(--green);
+}
+
+.readiness-segment.not-ready {
+  background: var(--red);
+}
+
+.readiness-meta {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.readiness-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.readiness-chip.ready {
+  color: var(--green);
+}
+
+.readiness-chip.not-ready {
+  color: #ff8c8c;
+}
+
+.readiness-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.readiness-chip.ready .readiness-chip-dot {
+  background: var(--green);
+}
+
+.readiness-chip.not-ready .readiness-chip-dot {
+  background: var(--red);
+}
