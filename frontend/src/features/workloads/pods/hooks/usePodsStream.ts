@@ -14,6 +14,7 @@ export function usePodsStream(clusterFilename: string, selectedNamespaces: strin
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const streamIdRef = useRef<string>('')
+  const namespacesKey = selectedNamespaces.join('\u0000')
 
   useEffect(() => {
     let active = true
@@ -63,7 +64,7 @@ export function usePodsStream(clusterFilename: string, selectedNamespaces: strin
       streamIdRef.current = ''
       void StopPodsStream()
     }
-  }, [clusterFilename, selectedNamespaces])
+  }, [clusterFilename, namespacesKey])
 
   return { items, loading, error }
 }

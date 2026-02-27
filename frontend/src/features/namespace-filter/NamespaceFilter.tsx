@@ -50,41 +50,47 @@ export default function NamespaceFilter({ namespaces, selected, onChange, classN
     <div className={rootClassName} ref={ref}>
       <div className="ns-filter-row">
         <span className="ns-label">Namespaces</span>
-        <button className="ns-trigger" onClick={() => setOpen(!open)}>
-          <span>{label}</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
-      </div>
+        <div className="ns-control">
+          <button
+            type="button"
+            className={`ns-trigger ${open ? 'open' : ''}`}
+            onClick={() => setOpen(!open)}
+          >
+            <span className="ns-trigger-value">{label}</span>
+            <svg className="ns-trigger-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
 
-      {open && (
-        <div className="ns-dropdown">
-          <input
-            className="ns-search"
-            placeholder="Search namespaces..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            autoFocus
-          />
-          <div className="ns-options">
-            <label className="ns-option">
-              <input type="checkbox" checked={allSelected} onChange={() => onChange([])} />
-              <span>All namespaces</span>
-            </label>
-            {filtered.map(ns => (
-              <label key={ns} className="ns-option">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(ns)}
-                  onChange={() => toggle(ns)}
-                />
-                <span>{ns}</span>
-              </label>
-            ))}
-          </div>
+          {open && (
+            <div className="ns-dropdown">
+              <input
+                className="ns-search"
+                placeholder="Search namespaces..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                autoFocus
+              />
+              <div className="ns-options">
+                <label className="ns-option">
+                  <input type="checkbox" checked={allSelected} onChange={() => onChange([])} />
+                  <span>All namespaces</span>
+                </label>
+                {filtered.map(ns => (
+                  <label key={ns} className="ns-option">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(ns)}
+                      onChange={() => toggle(ns)}
+                    />
+                    <span>{ns}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }

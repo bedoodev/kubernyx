@@ -28,9 +28,16 @@
   --radius-lg: 14px;
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --chart-usage: #60a5fa;
+  --chart-requests: #14b8a6;
+  --chart-limits: #22d3ee;
+  --chart-allocatable: #3b82f6;
+  --chart-capacity: #334155;
+  --text-legend: #8ea3bd;
+  --text-legend-value: #9fb4cd;
+  --text-legend-title: #d8e2f0;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
-  --sidebar-width: 260px;
 }
 
 *, *::before, *::after {

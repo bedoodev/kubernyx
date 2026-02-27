@@ -26,8 +26,8 @@ export default function Settings({ onPathChanged, embedded = false }: Props) {
       setBasePathLocal(dir)
       onPathChanged()
       setMessage({ type: 'success', text: 'Path updated successfully' })
-    } catch (e: any) {
-      setMessage({ type: 'error', text: e?.message || String(e) })
+    } catch (e: unknown) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : String(e) })
     } finally {
       setSaving(false)
     }

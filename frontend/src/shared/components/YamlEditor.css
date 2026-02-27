@@ -1,0 +1,221 @@
+.yaml-editor {
+  --yaml-font-size: 12px;
+  --yaml-line-height: 20px;
+  --yaml-pad-top: 12px;
+  --yaml-pad-bottom: 24px;
+  --yaml-gutter-width: 52px;
+  --yaml-content-pad: 14px;
+
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #253057;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #111827 0%, #0d1424 100%);
+  box-shadow: inset 0 0 0 1px rgba(126, 163, 255, 0.05);
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (max-width: 900px), (max-height: 760px) {
+  .yaml-editor {
+    --yaml-font-size: 11px;
+    --yaml-line-height: 18px;
+    --yaml-pad-top: 10px;
+    --yaml-pad-bottom: 18px;
+  }
+}
+
+.yaml-editor-toolbar {
+  min-height: 34px;
+  border-bottom: 1px solid #1f2a49;
+  background: linear-gradient(180deg, rgba(26, 37, 64, 0.95), rgba(16, 23, 40, 0.95));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  user-select: none;
+}
+
+.yaml-editor-toolbar-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.yaml-editor-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.yaml-editor-dot.red {
+  background: #ff5f57;
+}
+
+.yaml-editor-dot.yellow {
+  background: #fdbc2e;
+}
+
+.yaml-editor-dot.green {
+  background: #28c840;
+}
+
+.yaml-editor-title {
+  margin-left: 4px;
+  color: #b8caef;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yaml-editor-badge {
+  color: #8ca1cc;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* ─── Main Editor Area ─── */
+
+.yaml-editor-main {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.yaml-editor-surface {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+/* Gutter separator line */
+.yaml-editor-surface::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--yaml-gutter-width);
+  bottom: 0;
+  width: 1px;
+  background: #1f2a49;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* ─── Shared Highlight + Input ─── */
+
+.yaml-editor-highlight,
+.yaml-editor-input {
+  margin: 0;
+  border: 0;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  padding: var(--yaml-pad-top) var(--yaml-content-pad) var(--yaml-pad-bottom) calc(var(--yaml-gutter-width) + var(--yaml-content-pad));
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: var(--yaml-font-size);
+  line-height: var(--yaml-line-height);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  font-variant-ligatures: none;
+}
+
+.yaml-editor-highlight {
+  position: absolute;
+  inset: 0;
+  color: #d8e5ff;
+  background: transparent;
+  pointer-events: none;
+}
+
+.yaml-editor-input {
+  position: relative;
+  color: transparent;
+  caret-color: #e7f0ff;
+  -webkit-text-fill-color: transparent;
+  background: transparent;
+  resize: none;
+  outline: none;
+  user-select: text;
+}
+
+.yaml-editor-input::selection {
+  background: rgba(90, 133, 255, 0.28);
+}
+
+.yaml-editor-input::-webkit-scrollbar,
+.yaml-editor-highlight::-webkit-scrollbar {
+  width: 8px;
+  height: 0;
+}
+
+.yaml-editor-input::-webkit-scrollbar-thumb,
+.yaml-editor-highlight::-webkit-scrollbar-thumb {
+  background: rgba(124, 145, 190, 0.45);
+  border-radius: 999px;
+}
+
+/* ─── Per-Line Rendering ─── */
+
+.yaml-line {
+  position: relative;
+  min-height: var(--yaml-line-height);
+}
+
+.yaml-line::before {
+  content: attr(data-ln);
+  position: absolute;
+  left: calc(-1 * (var(--yaml-gutter-width) + var(--yaml-content-pad)));
+  width: calc(var(--yaml-gutter-width) - 8px);
+  text-align: right;
+  color: #4e628f;
+  font-size: inherit;
+  line-height: inherit;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* ─── Syntax Tokens ─── */
+
+.yaml-token-key {
+  color: #7dc1ff;
+}
+
+.yaml-token-string {
+  color: #f8c26d;
+}
+
+.yaml-token-number {
+  color: #8ae6a0;
+}
+
+.yaml-token-bool {
+  color: #ff8fb5;
+}
+
+.yaml-token-comment {
+  color: #6f84a8;
+  font-style: italic;
+}
+
+.yaml-token-punc {
+  color: #89a2d4;
+}
+
+.yaml-editor.is-readonly .yaml-editor-input {
+  cursor: text;
+}

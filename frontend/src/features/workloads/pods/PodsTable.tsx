@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import type { PodResource } from '../../../shared/types'
-import { formatAgeFromUnix } from '../../../shared/utils/formatting'
+import { getAgeLabel, parsePhase } from '../../../shared/utils/formatting'
+import { useDragResize } from '../../../shared/hooks/useDragResize'
 import { usePodsStream } from './hooks/usePodsStream'
 import { usePodDetail } from './hooks/usePodDetail'
-import PodDetailPanel from './components/PodDetailPanel'
+import { usePodLogs } from './hooks/usePodLogs'
+import PodDetailPanel, { type PodDetailsTabId } from './components/PodDetailPanel'
 import './PodsTable.css'
 
 interface Props {
   clusterFilename: string
   selectedNamespaces: string[]
+  showInlineDetails?: boolean
+  externalSelectedPodKey?: string | null
+  onPodActivate?: (pod: PodResource, options: { pin: boolean }) => void
 }
 
 const STATUS_ALL = 'all'
@@ -47,15 +52,7 @@ function buildInitialColumnWidths(): ColumnWidthState {
 }
 
 function normalizeStatus(status: string): string {
-  const base = status.trim().split(' ')[0] || 'unknown'
-  return base.toLowerCase()
-}
-
-function getAgeLabel(item: PodResource, nowUnix: number): string {
-  if (item.createdAtUnix && item.createdAtUnix > 0) {
-    return formatAgeFromUnix(item.createdAtUnix, nowUnix)
-  }
-  return item.age ?? '-'
+  return parsePhase(status).toLowerCase()
 }
 
 function getPodKey(item: PodResource): string {
@@ -66,50 +63,84 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-export default function PodsTable({ clusterFilename, selectedNamespaces }: Props) {
+function parseSortableNumber(value: string): number {
+  const n = parseFloat(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function formatStatusOption(option: string): string {
+  if (option === STATUS_ALL) {
+    return 'All Status'
+  }
+  return option.charAt(0).toUpperCase() + option.slice(1)
+}
+
+export default function PodsTable({
+  clusterFilename,
+  selectedNamespaces,
+  showInlineDetails = true,
+  externalSelectedPodKey = null,
+  onPodActivate,
+}: Props) {
   const { items, loading, error } = usePodsStream(clusterFilename, selectedNamespaces)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_ALL)
   const [pageSize, setPageSize] = useState<number>(20)
   const [page, setPage] = useState<number>(1)
+  const [sortKey, setSortKey] = useState<PodColumnKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [columnWidths, setColumnWidths] = useState<ColumnWidthState>(() => buildInitialColumnWidths())
-  const [isColumnResizing, setIsColumnResizing] = useState(false)
-  const [isDetailsResizing, setIsDetailsResizing] = useState(false)
   const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000))
   const [tableViewportWidth, setTableViewportWidth] = useState(0)
   const [selectedPodKey, setSelectedPodKey] = useState<string | null>(null)
+  const [activeDetailsTab, setActiveDetailsTab] = useState<PodDetailsTabId>('overview')
   const [detailWidth, setDetailWidth] = useState(560)
   const [detailsMaximized, setDetailsMaximized] = useState(false)
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false)
 
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const splitWrapRef = useRef<HTMLDivElement | null>(null)
-  const columnResizeStateRef = useRef<{
-    key: PodColumnKey
-    startX: number
-    startWidth: number
-    minWidth: number
-    maxWidth: number
-  } | null>(null)
-  const detailsResizeStateRef = useRef<{
-    startX: number
-    startWidth: number
-    minWidth: number
-    maxWidth: number
-  } | null>(null)
+  const statusFilterRef = useRef<HTMLDivElement | null>(null)
+  const activeColumnKeyRef = useRef<PodColumnKey | null>(null)
+
+  const handleColumnResizeUpdate = useCallback((nextWidth: number) => {
+    const key = activeColumnKeyRef.current
+    if (!key) return
+    setColumnWidths(current => ({ ...current, [key]: nextWidth }))
+  }, [])
+
+  const columnResize = useDragResize({ onUpdate: handleColumnResizeUpdate })
+  const detailsResize = useDragResize({ onUpdate: setDetailWidth, invertDelta: true })
 
   const selectedPod = useMemo(
     () => (selectedPodKey ? (items.find(item => getPodKey(item) === selectedPodKey) ?? null) : null),
     [items, selectedPodKey],
   )
+  const visibleSelectedPodKey = externalSelectedPodKey ?? selectedPodKey
 
   const { podDetail, podDetailLoading, podDetailError } = usePodDetail(clusterFilename, selectedPod)
+  const { podLogs, podLogsLoading, podLogsError, podLogsLoadingOlder, loadOlderLogs } = usePodLogs(
+    clusterFilename,
+    selectedPod,
+    Boolean(selectedPod && activeDetailsTab === 'logs'),
+  )
 
   useEffect(() => {
     const tick = window.setInterval(() => {
       setNowUnix(Math.floor(Date.now() / 1000))
     }, 1000)
     return () => window.clearInterval(tick)
+  }, [])
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (statusFilterRef.current && !statusFilterRef.current.contains(event.target as Node)) {
+        setStatusFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
   }, [])
 
   useEffect(() => {
@@ -167,81 +198,6 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
     return () => window.removeEventListener('resize', syncDetailWidth)
   }, [selectedPod])
 
-  useEffect(() => {
-    if (!isColumnResizing) {
-      return
-    }
-
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const resizeState = columnResizeStateRef.current
-      if (!resizeState) {
-        return
-      }
-      const delta = event.clientX - resizeState.startX
-      setColumnWidths(current => {
-        const nextWidth = Math.min(
-          resizeState.maxWidth,
-          Math.max(resizeState.minWidth, resizeState.startWidth + delta),
-        )
-        return { ...current, [resizeState.key]: nextWidth }
-      })
-    }
-
-    const stopResize = () => {
-      columnResizeStateRef.current = null
-      setIsColumnResizing(false)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', stopResize)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', stopResize)
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [isColumnResizing])
-
-  useEffect(() => {
-    if (!isDetailsResizing) {
-      return
-    }
-
-    const previousCursor = document.body.style.cursor
-    const previousUserSelect = document.body.style.userSelect
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const resizeState = detailsResizeStateRef.current
-      if (!resizeState) {
-        return
-      }
-      const delta = event.clientX - resizeState.startX
-      const nextWidth = clamp(resizeState.startWidth - delta, resizeState.minWidth, resizeState.maxWidth)
-      setDetailWidth(nextWidth)
-    }
-
-    const stopResize = () => {
-      detailsResizeStateRef.current = null
-      setIsDetailsResizing(false)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', stopResize)
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', stopResize)
-      document.body.style.cursor = previousCursor
-      document.body.style.userSelect = previousUserSelect
-    }
-  }, [isDetailsResizing])
-
   const tableMinWidth = useMemo(
     () => POD_COLUMNS.reduce((total, column) => total + columnWidths[column.key], 0),
     [columnWidths],
@@ -275,11 +231,45 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
     })
   }, [items, search, statusFilter])
 
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize))
+  const handleSort = (key: PodColumnKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedItems = useMemo(() => {
+    if (!sortKey) return filteredItems
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filteredItems].sort((a, b) => {
+      switch (sortKey) {
+        case 'name':
+          return dir * a.name.localeCompare(b.name)
+        case 'namespace':
+          return dir * a.namespace.localeCompare(b.namespace)
+        case 'controlledBy':
+          return dir * a.controlledBy.localeCompare(b.controlledBy)
+        case 'status':
+          return dir * a.status.localeCompare(b.status)
+        case 'cpu':
+          return dir * (parseSortableNumber(a.cpu) - parseSortableNumber(b.cpu))
+        case 'memory':
+          return dir * (parseSortableNumber(a.memory) - parseSortableNumber(b.memory))
+        case 'age':
+          return dir * ((a.createdAtUnix ?? 0) - (b.createdAtUnix ?? 0))
+        default:
+          return 0
+      }
+    })
+  }, [filteredItems, sortKey, sortDir])
+
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize))
   const pageStart = (page - 1) * pageSize
   const pagedItems = useMemo(
-    () => filteredItems.slice(pageStart, pageStart + pageSize),
-    [filteredItems, pageSize, pageStart],
+    () => sortedItems.slice(pageStart, pageStart + pageSize),
+    [sortedItems, pageSize, pageStart],
   )
 
   useEffect(() => {
@@ -290,7 +280,7 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
     setPage(current => Math.min(current, totalPages))
   }, [totalPages])
 
-  const rowCountLabel = loading ? '...' : String(filteredItems.length)
+  const rowCountLabel = loading ? '...' : String(sortedItems.length)
 
   const handleColumnResizeStart = (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -298,22 +288,11 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
     minWidth: number,
     maxWidth: number,
   ) => {
-    event.preventDefault()
-    event.stopPropagation()
-    columnResizeStateRef.current = {
-      key,
-      startX: event.clientX,
-      startWidth: columnWidths[key],
-      minWidth,
-      maxWidth,
-    }
-    setIsColumnResizing(true)
+    activeColumnKeyRef.current = key
+    columnResize.start(event, columnWidths[key], minWidth, maxWidth)
   }
 
   const handleDetailsResizeStart = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
     const splitWrap = splitWrapRef.current
     if (!splitWrap) {
       return
@@ -322,17 +301,14 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
     const totalWidth = splitWrap.clientWidth
     const maxWidth = Math.max(DETAIL_MIN_WIDTH, totalWidth - DETAIL_LEFT_MIN_WIDTH)
 
-    detailsResizeStateRef.current = {
-      startX: event.clientX,
-      startWidth: detailWidth,
-      minWidth: DETAIL_MIN_WIDTH,
-      maxWidth,
-    }
-    setIsDetailsResizing(true)
+    detailsResize.start(event, detailWidth, DETAIL_MIN_WIDTH, maxWidth)
   }
 
   const openPodDetails = (pod: PodResource) => {
     const podKey = getPodKey(pod)
+    if (podKey !== selectedPodKey) {
+      setActiveDetailsTab('overview')
+    }
     setSelectedPodKey(podKey)
 
     const splitWrap = splitWrapRef.current
@@ -346,16 +322,16 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
 
   const closePodDetails = () => {
     setSelectedPodKey(null)
+    setActiveDetailsTab('overview')
     setDetailsMaximized(false)
   }
 
   return (
-    <div className={`pods-table-root ${selectedPod ? 'with-details' : ''} ${(isColumnResizing || isDetailsResizing) ? 'resizing' : ''}`}>
-      <div className={`pods-content ${selectedPod ? 'with-details' : ''}`} ref={splitWrapRef}>
+    <div className={`pods-table-root ${showInlineDetails && selectedPod ? 'with-details' : ''} ${(columnResize.isResizing || detailsResize.isResizing) ? 'resizing' : ''}`}>
+      <div className={`pods-content ${showInlineDetails && selectedPod ? 'with-details' : ''}`} ref={splitWrapRef}>
         <div className="pods-table-pane">
           <div className="pods-toolbar">
             <div className="pods-resource-count">
-              <span>Resources</span>
               <strong>{rowCountLabel}</strong>
             </div>
             <input
@@ -364,17 +340,39 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
               value={search}
               onChange={event => setSearch(event.target.value)}
             />
-            <select
-              className="pods-status-filter"
-              value={statusFilter}
-              onChange={event => setStatusFilter(event.target.value)}
-            >
-              {statusOptions.map(option => (
-                <option key={option} value={option}>
-                  {option === STATUS_ALL ? 'All' : option}
-                </option>
-              ))}
-            </select>
+            <div className={`pods-status-select ${statusFilterOpen ? 'open' : ''}`} ref={statusFilterRef}>
+              <button
+                type="button"
+                className={`pods-status-trigger ${statusFilterOpen ? 'open' : ''}`}
+                onClick={() => setStatusFilterOpen(current => !current)}
+                aria-haspopup="listbox"
+                aria-expanded={statusFilterOpen}
+              >
+                <span className="pods-status-trigger-value">{formatStatusOption(statusFilter)}</span>
+                <svg className="pods-status-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+              {statusFilterOpen && (
+                <div className="pods-status-dropdown" role="listbox" aria-label="Status filter">
+                  {statusOptions.map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      role="option"
+                      className={`pods-status-option ${statusFilter === option ? 'selected' : ''}`}
+                      aria-selected={statusFilter === option}
+                      onClick={() => {
+                        setStatusFilter(option)
+                        setStatusFilterOpen(false)
+                      }}
+                    >
+                      {formatStatusOption(option)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="pods-table-wrap" ref={tableWrapRef}>
@@ -389,11 +387,36 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
                   {POD_COLUMNS.map((column, index) => (
                     <th key={column.key}>
                       <div className="pods-th-content">
-                        <span className="pods-th-label">{column.label}</span>
+                        <button
+                          type="button"
+                          className="pods-th-sort"
+                          onClick={() => handleSort(column.key)}
+                          aria-label={`Sort by ${column.label}`}
+                        >
+                          <span className="pods-th-label">{column.label}</span>
+                          <svg
+                            className={`pods-sort-icon ${sortKey === column.key ? 'active' : ''}`}
+                            width="10"
+                            height="14"
+                            viewBox="0 0 10 14"
+                            fill="none"
+                          >
+                            <path
+                              d="M5 0.5L9 5.5H1L5 0.5Z"
+                              fill="currentColor"
+                              opacity={sortKey === column.key && sortDir === 'asc' ? 1 : 0.35}
+                            />
+                            <path
+                              d="M5 13.5L1 8.5H9L5 13.5Z"
+                              fill="currentColor"
+                              opacity={sortKey === column.key && sortDir === 'desc' ? 1 : 0.35}
+                            />
+                          </svg>
+                        </button>
                         {index < POD_COLUMNS.length - 1 && (
                           <button
                             type="button"
-                            className="pods-col-resizer"
+                            className={`pods-col-resizer ${columnResize.isResizing && activeColumnKeyRef.current === column.key ? 'active' : ''}`}
                             onMouseDown={event => handleColumnResizeStart(event, column.key, column.minWidth, column.maxWidth)}
                             aria-label={`Resize ${column.label} column`}
                           />
@@ -406,27 +429,33 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
               <tbody>
                 {error ? (
                   <tr>
-                    <td colSpan={7} className="pods-empty-row error">{error}</td>
+                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row error">{error}</td>
                   </tr>
                 ) : loading ? (
                   <tr>
-                    <td colSpan={7} className="pods-empty-row">Loading pods...</td>
+                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row">Loading pods...</td>
                   </tr>
-                ) : filteredItems.length === 0 ? (
+                ) : sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="pods-empty-row">No pods found</td>
+                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row">No pods found</td>
                   </tr>
                 ) : (
                   pagedItems.map(item => {
                     const podKey = getPodKey(item)
-                    const isSelected = selectedPodKey === podKey
+                    const isSelected = visibleSelectedPodKey === podKey
                     return (
                       <tr key={podKey} className={isSelected ? 'selected' : ''}>
                         <td className="pods-name-cell pods-cell" title={item.name}>
                           <button
                             type="button"
                             className={`pods-name-button ${isSelected ? 'active' : ''}`}
-                            onClick={() => openPodDetails(item)}
+                            onClick={event => {
+                              const pin = event.detail >= 2
+                              onPodActivate?.(item, { pin })
+                              if (showInlineDetails) {
+                                openPodDetails(item)
+                              }
+                            }}
                           >
                             {item.name}
                           </button>
@@ -486,7 +515,7 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
           </div>
         </div>
 
-        {selectedPod && !detailsMaximized && (
+        {showInlineDetails && selectedPod && !detailsMaximized && (
           <>
             <button
               type="button"
@@ -496,12 +525,19 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
             />
             <aside className="pods-detail-pane" style={{ width: `${detailWidth}px`, minWidth: `${detailWidth}px` }}>
               <PodDetailPanel
+                clusterFilename={clusterFilename}
                 mode="split"
+                activeDetailsTab={activeDetailsTab}
+                onDetailsTabChange={setActiveDetailsTab}
                 selectedPod={selectedPod}
                 podDetail={podDetail}
                 podDetailLoading={podDetailLoading}
                 podDetailError={podDetailError}
-                nowUnix={nowUnix}
+                podLogs={podLogs}
+                podLogsLoading={podLogsLoading}
+                podLogsError={podLogsError}
+                podLogsLoadingOlder={podLogsLoadingOlder}
+                onLoadOlderLogs={loadOlderLogs}
                 detailsMaximized={detailsMaximized}
                 onToggleMaximize={() => setDetailsMaximized(current => !current)}
                 onClose={closePodDetails}
@@ -511,16 +547,23 @@ export default function PodsTable({ clusterFilename, selectedNamespaces }: Props
         )}
       </div>
 
-      {selectedPod && detailsMaximized && (
+      {showInlineDetails && selectedPod && detailsMaximized && (
         <div className="pods-detail-modal-overlay" onClick={() => setDetailsMaximized(false)}>
           <div className="pods-detail-modal" onClick={event => event.stopPropagation()}>
             <PodDetailPanel
+              clusterFilename={clusterFilename}
               mode="modal"
+              activeDetailsTab={activeDetailsTab}
+              onDetailsTabChange={setActiveDetailsTab}
               selectedPod={selectedPod}
               podDetail={podDetail}
               podDetailLoading={podDetailLoading}
               podDetailError={podDetailError}
-              nowUnix={nowUnix}
+              podLogs={podLogs}
+              podLogsLoading={podLogsLoading}
+              podLogsError={podLogsError}
+              podLogsLoadingOlder={podLogsLoadingOlder}
+              onLoadOlderLogs={loadOlderLogs}
               detailsMaximized={detailsMaximized}
               onToggleMaximize={() => setDetailsMaximized(current => !current)}
               onClose={closePodDetails}

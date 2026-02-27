@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { WORKLOAD_TAB_OPTIONS } from '../../shared/types'
 import type { ClusterInfo, ClusterSection, WorkloadTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
+import EditClusterModal from './components/EditClusterModal'
 import './Sidebar.css'
 
 interface Props {
@@ -16,13 +17,30 @@ interface Props {
   onAdd: (name: string, content: string) => Promise<void>
   onRename: (oldFilename: string, newName: string) => Promise<void>
   onDelete: (filename: string) => Promise<void>
+  onReadConfig: (filename: string) => Promise<string>
+  onUpdateConfig: (filename: string, content: string) => Promise<void>
   onSettingsClick: () => void
 }
 
-export default function Sidebar({ clusters, width, activeCluster, activeSection, activeWorkloadTab, showSettings, onToggleCollapse, onSelect, onAdd, onRename, onDelete, onSettingsClick }: Props) {
+export default function Sidebar({
+  clusters,
+  width,
+  activeCluster,
+  activeSection,
+  activeWorkloadTab,
+  showSettings,
+  onToggleCollapse,
+  onSelect,
+  onAdd,
+  onRename,
+  onDelete,
+  onReadConfig,
+  onUpdateConfig,
+  onSettingsClick,
+}: Props) {
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingCluster, setEditingCluster] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
+  const [editingConfigCluster, setEditingConfigCluster] = useState<ClusterInfo | null>(null)
+  const [clusterSearch, setClusterSearch] = useState('')
   const [contextMenu, setContextMenu] = useState<{ filename: string; x: number; y: number } | null>(null)
   const [expandedClusters, setExpandedClusters] = useState<string[]>([])
   const [expandedWorkloads, setExpandedWorkloads] = useState<string[]>([])
@@ -56,18 +74,13 @@ export default function Sidebar({ clusters, width, activeCluster, activeSection,
     setContextMenu({ filename: c.filename, x: e.clientX, y: e.clientY })
   }
 
-  const handleStartRename = (c: ClusterInfo) => {
-    setEditingCluster(c.filename)
-    setEditName(c.name)
-    setContextMenu(null)
-  }
-
-  const handleRename = async (oldFilename: string) => {
-    if (editName.trim()) {
-      await onRename(oldFilename, editName.trim())
+  const filteredClusters = useMemo(() => {
+    const query = clusterSearch.trim().toLowerCase()
+    if (!query) {
+      return clusters
     }
-    setEditingCluster(null)
-  }
+    return clusters.filter(cluster => cluster.name.toLowerCase().includes(query))
+  }, [clusterSearch, clusters])
 
   const handleDelete = (filename: string) => {
     setContextMenu(null)
@@ -122,12 +135,23 @@ export default function Sidebar({ clusters, width, activeCluster, activeSection,
             </button>
           </div>
         </div>
+        <div className="sidebar-search-wrap">
+          <input
+            type="search"
+            className="sidebar-search-input"
+            placeholder="Search clusters..."
+            value={clusterSearch}
+            onChange={event => setClusterSearch(event.target.value)}
+          />
+        </div>
 
         <div className="cluster-list">
-          {clusters.length === 0 ? (
-            <div className="no-clusters">No clusters found</div>
+          {filteredClusters.length === 0 ? (
+            <div className="no-clusters">
+              {clusters.length === 0 ? 'No clusters found' : 'No matching clusters'}
+            </div>
           ) : (
-            clusters.map(c => {
+            filteredClusters.map(c => {
               const expanded = expandedClusters.includes(c.filename)
               const active = activeCluster?.filename === c.filename
               const overviewActive = active && activeSection === 'overview'
@@ -140,92 +164,77 @@ export default function Sidebar({ clusters, width, activeCluster, activeSection,
                   className={`cluster-item ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}`}
                   onContextMenu={e => handleContextMenu(e, c)}
                 >
-                  {editingCluster === c.filename ? (
-                    <input
-                      className="rename-input"
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onBlur={() => handleRename(c.filename)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleRename(c.filename)
-                        if (e.key === 'Escape') setEditingCluster(null)
-                      }}
-                      autoFocus
-                      onClick={e => e.stopPropagation()}
-                    />
-                  ) : (
-                    <>
-                      <div className="cluster-main-row">
+                  <>
+                    <div className="cluster-main-row">
+                      <button
+                        type="button"
+                        className="cluster-toggle-btn"
+                        onClick={e => {
+                          e.stopPropagation()
+                          toggleCluster(c.filename)
+                        }}
+                        aria-expanded={expanded}
+                      >
+                        <svg className={`cluster-chevron ${expanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path d="M7 5l6 5-6 5V5z" />
+                        </svg>
+                        <div className={`cluster-dot ${c.healthStatus ?? 'red'}`} />
+                        <span className="cluster-name">{c.name}</span>
+                      </button>
+                      <button
+                        className="cluster-menu-btn"
+                        onClick={e => { e.stopPropagation(); handleContextMenu(e, c) }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/>
+                        </svg>
+                      </button>
+                    </div>
+                    {expanded && (
+                      <>
                         <button
                           type="button"
-                          className="cluster-toggle-btn"
+                          className={`cluster-sub-item ${overviewActive ? 'active' : ''}`}
                           onClick={e => {
                             e.stopPropagation()
-                            toggleCluster(c.filename)
+                            onSelect(c, 'overview')
                           }}
-                          aria-expanded={expanded}
                         >
-                          <svg className={`cluster-chevron ${expanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path d="M7 5l6 5-6 5V5z" />
-                          </svg>
-                          <div className={`cluster-dot ${c.healthStatus ?? 'red'}`} />
-                          <span className="cluster-name">{c.name}</span>
+                          <span>Overview</span>
                         </button>
                         <button
-                          className="cluster-menu-btn"
-                          onClick={e => { e.stopPropagation(); handleContextMenu(e, c) }}
+                          type="button"
+                          className={`cluster-sub-item cluster-sub-toggle ${workloadsActive ? 'active' : ''}`}
+                          onClick={e => {
+                            e.stopPropagation()
+                            toggleWorkloads(c.filename)
+                          }}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/>
+                          <span>Workloads</span>
+                          <svg className={`cluster-sub-chevron ${workloadsExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path d="M7 5l6 5-6 5V5z" />
                           </svg>
                         </button>
-                      </div>
-                      {expanded && (
-                        <>
-                          <button
-                            type="button"
-                            className={`cluster-sub-item ${overviewActive ? 'active' : ''}`}
-                            onClick={e => {
-                              e.stopPropagation()
-                              onSelect(c, 'overview')
-                            }}
-                          >
-                            <span>Overview</span>
-                          </button>
-                          <button
-                            type="button"
-                            className={`cluster-sub-item cluster-sub-toggle ${workloadsActive ? 'active' : ''}`}
-                            onClick={e => {
-                              e.stopPropagation()
-                              toggleWorkloads(c.filename)
-                            }}
-                          >
-                            <span>Workloads</span>
-                            <svg className={`cluster-sub-chevron ${workloadsExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                              <path d="M7 5l6 5-6 5V5z" />
-                            </svg>
-                          </button>
-                          {workloadsExpanded && (
-                            <div className="cluster-workloads-list">
-                              {WORKLOAD_TAB_OPTIONS.map(tab => (
-                                <button
-                                  key={tab.id}
-                                  type="button"
-                                  className={`cluster-workload-item ${workloadsActive && activeWorkloadTab === tab.id ? 'active' : ''}`}
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    onSelect(c, 'workloads', tab.id)
-                                  }}
-                                >
-                                  {tab.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
+                        {workloadsExpanded && (
+                          <div className="cluster-workloads-list">
+                            {WORKLOAD_TAB_OPTIONS.map(tab => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                className={`cluster-workload-item ${workloadsActive && activeWorkloadTab === tab.id ? 'active' : ''}`}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  onSelect(c, 'workloads', tab.id)
+                                }}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
                 </div>
               )
             })
@@ -245,8 +254,14 @@ export default function Sidebar({ clusters, width, activeCluster, activeSection,
       {contextMenu && (
         <div className="context-overlay" onClick={() => setContextMenu(null)}>
           <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => { const c = clusters.find(c => c.filename === contextMenu.filename); if (c) handleStartRename(c); else setContextMenu(null); }}>
-              Rename
+            <button onClick={() => {
+              const cluster = clusters.find(item => item.filename === contextMenu.filename)
+              setContextMenu(null)
+              if (cluster) {
+                setEditingConfigCluster(cluster)
+              }
+            }}>
+              Edit kubeconfig
             </button>
             <button className="danger" onClick={() => handleDelete(contextMenu.filename)}>
               Delete
@@ -257,6 +272,16 @@ export default function Sidebar({ clusters, width, activeCluster, activeSection,
 
       {showAddModal && (
         <AddClusterModal onAdd={onAdd} onClose={() => setShowAddModal(false)} />
+      )}
+
+      {editingConfigCluster && (
+        <EditClusterModal
+          cluster={editingConfigCluster}
+          onLoad={onReadConfig}
+          onSave={onUpdateConfig}
+          onRename={onRename}
+          onClose={() => setEditingConfigCluster(null)}
+        />
       )}
     </>
   )

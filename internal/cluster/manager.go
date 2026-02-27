@@ -122,6 +122,33 @@ func DeleteCluster(basePath, filename string) error {
 	return os.Remove(p)
 }
 
+func ReadClusterConfig(basePath, filename string) (string, error) {
+	if basePath == "" {
+		return "", fmt.Errorf("base path not configured")
+	}
+	p, err := safeJoin(basePath, filename)
+	if err != nil {
+		return "", err
+	}
+
+	content, err := os.ReadFile(p)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+func UpdateClusterConfig(basePath, filename, content string) error {
+	if basePath == "" {
+		return fmt.Errorf("base path not configured")
+	}
+	p, err := safeJoin(basePath, filename)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, []byte(content), 0600)
+}
+
 func GetKubeconfigPath(basePath, filename string) (string, error) {
 	if basePath == "" {
 		return "", fmt.Errorf("base path not configured")

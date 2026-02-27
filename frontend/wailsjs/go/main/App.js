@@ -18,8 +18,16 @@ export function GetBasePath() {
   return window['go']['main']['App']['GetBasePath']();
 }
 
+export function GetClusterConfig(arg1) {
+  return window['go']['main']['App']['GetClusterConfig'](arg1);
+}
+
 export function GetPodDetails(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetPodDetails'](arg1, arg2, arg3);
+}
+
+export function GetPodLogs(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetPodLogs'](arg1, arg2, arg3, arg4);
 }
 
 export function GetWorkloads(arg1) {
@@ -38,6 +46,10 @@ export function RenameCluster(arg1, arg2) {
   return window['go']['main']['App']['RenameCluster'](arg1, arg2);
 }
 
+export function SavePodLogsFile(arg1, arg2) {
+  return window['go']['main']['App']['SavePodLogsFile'](arg1, arg2);
+}
+
 export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
@@ -46,10 +58,22 @@ export function SetBasePath(arg1) {
   return window['go']['main']['App']['SetBasePath'](arg1);
 }
 
+export function StartPodLogsStream(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['StartPodLogsStream'](arg1, arg2, arg3, arg4);
+}
+
 export function StartPodsStream(arg1, arg2) {
   return window['go']['main']['App']['StartPodsStream'](arg1, arg2);
 }
 
+export function StopPodLogsStream() {
+  return window['go']['main']['App']['StopPodLogsStream']();
+}
+
 export function StopPodsStream() {
   return window['go']['main']['App']['StopPodsStream']();
+}
+
+export function UpdateClusterConfig(arg1, arg2) {
+  return window['go']['main']['App']['UpdateClusterConfig'](arg1, arg2);
 }

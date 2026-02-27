@@ -10,6 +10,8 @@ import {
   AddCluster as AddClusterApi,
   RenameCluster as RenameClusterApi,
   DeleteCluster as DeleteClusterApi,
+  GetClusterConfig as GetClusterConfigApi,
+  UpdateClusterConfig as UpdateClusterConfigApi,
 } from '../api'
 
 const DOUBLE_SELECT_WINDOW_MS = 400
@@ -97,6 +99,8 @@ export interface UseClusterTabsResult {
   handleAddCluster: (name: string, content: string) => Promise<void>
   handleRenameCluster: (oldFilename: string, newName: string) => Promise<void>
   handleDeleteCluster: (filename: string) => Promise<void>
+  handleGetClusterConfig: (filename: string) => Promise<string>
+  handleUpdateClusterConfig: (filename: string, content: string) => Promise<void>
   loadClusters: () => Promise<void>
 }
 
@@ -550,6 +554,15 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     } catch {}
   }
 
+  const handleGetClusterConfig = async (filename: string) => {
+    return GetClusterConfigApi(filename)
+  }
+
+  const handleUpdateClusterConfig = async (filename: string, content: string) => {
+    await UpdateClusterConfigApi(filename, content)
+    await loadClusters()
+  }
+
   return {
     clusters,
     tabs,
@@ -567,6 +580,8 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     handleAddCluster,
     handleRenameCluster,
     handleDeleteCluster,
+    handleGetClusterConfig,
+    handleUpdateClusterConfig,
     loadClusters,
   }
 }

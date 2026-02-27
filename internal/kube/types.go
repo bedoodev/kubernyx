@@ -80,11 +80,51 @@ type PodResourceSnapshot struct {
 }
 
 type PodDetailContainer struct {
-	Name     string `json:"name"`
-	Image    string `json:"image"`
-	State    string `json:"state"`
-	Ready    bool   `json:"ready"`
-	Restarts int64  `json:"restarts"`
+	Name            string                  `json:"name"`
+	Image           string                  `json:"image"`
+	ImagePullPolicy string                  `json:"imagePullPolicy"`
+	ContainerID     string                  `json:"containerId"`
+	State           string                  `json:"state"`
+	Ready           bool                    `json:"ready"`
+	Restarts        int64                   `json:"restarts"`
+	Command         []string                `json:"command"`
+	Args            []string                `json:"args"`
+	Env             []PodDetailEnvVar       `json:"env"`
+	Mounts          []PodDetailVolumeMount  `json:"mounts"`
+	Ports           []PodDetailPort         `json:"ports"`
+	Requests        PodDetailResourceValues `json:"requests"`
+	Limits          PodDetailResourceValues `json:"limits"`
+}
+
+type PodDetailEnvVar struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type PodDetailVolumeMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+	ReadOnly  bool   `json:"readOnly"`
+	SubPath   string `json:"subPath"`
+}
+
+type PodDetailPort struct {
+	Name          string `json:"name"`
+	ContainerPort int32  `json:"containerPort"`
+	Protocol      string `json:"protocol"`
+}
+
+type PodDetailResourceValues struct {
+	CPU    string `json:"cpu"`
+	Memory string `json:"memory"`
+}
+
+type PodDetailEvent struct {
+	Type    string `json:"type"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+	Count   int32  `json:"count"`
+	Age     string `json:"age"`
 }
 
 type PodDetailCondition struct {
@@ -124,8 +164,18 @@ type PodDetail struct {
 	Annotations     map[string]string         `json:"annotations"`
 	OwnerReferences []PodDetailOwnerReference `json:"ownerReferences"`
 	Volumes         []PodDetailVolume         `json:"volumes"`
+	InitContainers  []PodDetailContainer      `json:"initContainers"`
 	Containers      []PodDetailContainer      `json:"containers"`
 	Conditions      []PodDetailCondition      `json:"conditions"`
+	Events          []PodDetailEvent          `json:"events"`
+	Manifest        string                    `json:"manifest"`
+}
+
+type PodLogLine struct {
+	Container     string `json:"container"`
+	CreatedAt     string `json:"createdAt"`
+	CreatedAtUnix int64  `json:"createdAtUnix"`
+	Message       string `json:"message"`
 }
 
 const (

@@ -11,7 +11,11 @@ export function DeleteCluster(arg1:string):Promise<void>;
 
 export function GetBasePath():Promise<string>;
 
+export function GetClusterConfig(arg1:string):Promise<string>;
+
 export function GetPodDetails(arg1:string,arg2:string,arg3:string):Promise<kube.PodDetail>;
+
+export function GetPodLogs(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<kube.PodLogLine>>;
 
 export function GetWorkloads(arg1:Array<string>):Promise<kube.WorkloadCounts>;
 
@@ -21,10 +25,18 @@ export function RefreshOverview(arg1:string):Promise<kube.ClusterOverview>;
 
 export function RenameCluster(arg1:string,arg2:string):Promise<string>;
 
+export function SavePodLogsFile(arg1:string,arg2:string):Promise<string>;
+
 export function SelectDirectory():Promise<string>;
 
 export function SetBasePath(arg1:string):Promise<void>;
 
+export function StartPodLogsStream(arg1:string,arg2:string,arg3:string,arg4:number):Promise<string>;
+
 export function StartPodsStream(arg1:string,arg2:Array<string>):Promise<string>;
 
+export function StopPodLogsStream():Promise<void>;
+
 export function StopPodsStream():Promise<void>;
+
+export function UpdateClusterConfig(arg1:string,arg2:string):Promise<void>;

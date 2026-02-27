@@ -20,11 +20,11 @@ interface LegendItem {
 }
 
 const COLORS = {
-  usage: '#60a5fa',
-  requests: '#14b8a6',
-  limits: '#22d3ee',
-  allocatable: '#3b82f6',
-  capacity: '#334155',
+  usage: 'var(--chart-usage)',
+  requests: 'var(--chart-requests)',
+  limits: 'var(--chart-limits)',
+  allocatable: 'var(--chart-allocatable)',
+  capacity: 'var(--chart-capacity)',
 } as const
 
 function RingGauge({ metrics, total, tooltipItems }: {

@@ -8,58 +8,70 @@ Kubernyx is a lightweight desktop Kubernetes IDE built with Wails v2 (Go backend
 
 ## Tech Stack
 
-- **Backend:** Go with client-go and k8s.io/metrics for Kubernetes API interactions
-- **Frontend:** React 18 + TypeScript, bundled with Vite
+- **Backend:** Go 1.23 with client-go and k8s.io/metrics for Kubernetes API interactions
+- **Frontend:** React 18 + TypeScript (strict mode), bundled with Vite
 - **Desktop:** Wails v2 (Go ↔ WebView bridge)
-- **License:** Apache 2.0
+- **Dependencies:** Minimal — frontend has only React/ReactDOM as runtime deps, no UI library
 
 ## Build Commands
 
 - **Full build:** `make build` or `~/go/bin/wails build` — produces macOS .app in `build/bin/`
 - **Dev mode:** `make dev` or `~/go/bin/wails dev` — hot-reload frontend + Go backend
 - **Go only:** `go build ./...`
-- **Frontend only:** `cd frontend && npm run build`
+- **Frontend only:** `cd frontend && npm run build` (runs `tsc && vite build`)
 - **TypeScript check:** `cd frontend && npx tsc --noEmit`
 - **Go tests:** `go test ./...`
-- **Clean:** `make clean`
+- **Clean:** `make clean` (async, handles macOS file locking)
 
 ## Architecture
 
+### Go Backend
+
 ```
-main.go          — Wails app entry point, embeds frontend/dist, macOS fullscreen enabled
-app.go           — App struct bound to frontend via Wails (all exported methods callable from JS)
-                   Includes pod streaming goroutine, cluster health checks
+main.go              — Wails entry point, embeds frontend/dist, window config (1280×820, min 960×600)
+app.go               — App struct bound to Wails; all exported methods callable from JS
+                       Key methods: ConnectCluster, RefreshOverview, GetWorkloads,
+                       StartPodsStream/StopPodsStream, GetPodDetails, ListClusters,
+                       AddCluster, RenameCluster, DeleteCluster, Get/SetBasePath,
+                       GetClusterConfig, UpdateClusterConfig
 internal/
-  config/        — Persists base directory path to ~/.kubernyx/config.json
-  cluster/       — CRUD on kubeconfig files + parallel health checking via kube client
-  kube/          — Kubernetes client: nodes, resources, workloads, pods streaming, pod details
-frontend/
-  src/App.tsx    — Root component with tab system (ClusterTabState), sidebar resizing, keyboard shortcuts
-  src/types.ts   — Frontend type definitions (ClusterSection, WorkloadTabId, etc.)
-  src/components/
-    Setup.tsx         — First-launch directory picker
-    Sidebar.tsx       — Cluster tree (expandable with Overview/Workloads sub-items) + add/rename/delete modal
-    Overview.tsx      — Dashboard layout: summary cards, resource charts, namespace filter, workload bars
-    WorkloadsView.tsx — Workload tab view with workload type sub-tabs
-    PodsTable.tsx     — Real-time pods table with streaming data
-    SummaryCards.tsx   — Node count cards + segmented readiness bar
-    ResourceCharts.tsx — Multi-ring SVG gauge charts for CPU/Memory/Pods
-    NamespaceFilter.tsx — Searchable multi-select namespace dropdown
-    WorkloadBars.tsx   — Multi-segment horizontal bars with phase breakdown tooltips
-    Settings.tsx       — Base path configuration (shown as modal overlay)
-  wailsjs/       — Auto-generated Wails bindings (DO NOT manually edit models.ts or App.js/App.d.ts)
+  config/config.go   — AppConfig struct, persists base directory to ~/.kubernyx/config.json
+  cluster/           — manager.go (CRUD + listing), health.go (parallel health checks)
+  kube/              — client.go (K8s client wrapper), types.go (30+ response structs),
+                       overview.go, workloads.go, pods.go, format.go, volume.go, helpers.go
+```
+
+### Frontend (Feature-Based Structure)
+
+```
+frontend/src/
+  App.tsx                — Root: tab system, sidebar, keyboard shortcuts
+  shared/
+    api/index.ts         — Barrel export of all Wails bindings
+    types/               — cluster.ts, overview.ts, workloads.ts, pods.ts (mirrors Go structs)
+    hooks/               — useClusterTabs, useDragResize, useKeyboardShortcuts, useSidebarResize
+    utils/               — formatting.ts, normalization.ts, platform.ts
+    components/          — Modal.tsx, YamlEditor.tsx
+  features/
+    setup/               — First-launch directory picker
+    sidebar/             — Cluster tree + AddClusterModal, EditClusterModal
+    overview/            — Dashboard: SummaryCards, ResourceCharts, WorkloadBars
+    workloads/           — WorkloadsView + pods/ (PodsTable, PodDetailPanel, usePodsStream, usePodDetail)
+    namespace-filter/    — Searchable multi-select namespace dropdown
+    settings/            — Base path config modal
+  wailsjs/               — Auto-generated Wails bindings (DO NOT manually edit)
 ```
 
 ## Key Patterns
 
-- **Wails bindings:** All exported methods on `App` struct in `app.go` are auto-bound and callable from frontend via `wailsjs/go/main/App`. Wails regenerates bindings on build.
-- **Tab system:** Each cluster view opens as a tab (`ClusterTabState`) with its own overview, workloads, namespace filter, and loading/error state. Tabs track `hasActivity` — inactive tabs auto-close when switching. Double-click pins a tab.
+- **Wails bindings:** All exported methods on `App` struct in `app.go` auto-bind to `wailsjs/go/main/App`. Frontend wraps these in `shared/api/index.ts`. Wails regenerates bindings on build.
+- **Tab system:** `useClusterTabs` hook manages `ClusterTabState` per cluster — each tab owns its overview, workloads, namespace filter, and loading/error state. Inactive tabs auto-close; double-click pins a tab.
 - **Sidebar tree:** Clusters expand to show Overview and Workloads sub-items. Workloads further expands to individual workload types (Pods, Deployments, etc.).
-- **Pod streaming:** `StartPodsStream`/`StopPodsStream` manage a background goroutine that uses watch + periodic polling, emitting `pods-stream` Wails events. Sequence numbers prevent stale data from old streams.
+- **Pod streaming:** `StartPodsStream`/`StopPodsStream` manage a background goroutine using watch + 2-second polling, emitting `pods-stream` Wails events. Sequence numbers (`podStreamSeq`) prevent stale data from old streams.
 - **Cluster health:** `ListClusters` runs parallel health checks with a goroutine semaphore, classifying clusters as green/yellow/red.
-- **Workload phases:** Go functions classify each workload type into running/pending/failed/succeeded phase counts.
-- **Path safety:** `cluster.safeJoin()` prevents path traversal on all file operations.
 - **Concurrency:** `App.client`, `podStreamCancel`, `podStreamSeq` are protected by `sync.RWMutex` since Wails dispatches bound methods on separate goroutines.
-- **Config persistence:** App config stored at `~/.kubernyx/config.json`.
-- **Types:** Frontend types in `src/types.ts` mirror Go structs; Wails-generated models in `wailsjs/go/models.ts`.
-- **Keyboard shortcuts:** Cmd+W closes active tab, Cmd+B toggles sidebar, Escape closes settings modal.
+- **Path safety:** `cluster.safeJoin()` prevents path traversal on all file operations.
+- **Type architecture:** Frontend types live in `shared/types/` (not auto-generated). Wails-generated models in `wailsjs/go/models.ts` exist but the frontend uses its own type definitions.
+- **Drag resize:** Generic `useDragResize` hook powers sidebar resizing, column resizing in PodsTable, and detail panel resizing.
+- **Keyboard shortcuts:** Cmd+W closes active tab, Cmd+B toggles sidebar, Escape closes settings modal (via `useKeyboardShortcuts` hook).
+- **CSS:** No CSS framework — all hand-written CSS using CSS custom properties for theming (`--bg-primary`, `--accent`, `--border`, etc.). Each feature has co-located `.css` files.

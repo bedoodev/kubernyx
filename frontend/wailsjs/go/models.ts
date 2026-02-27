@@ -108,6 +108,26 @@ export namespace kube {
 		}
 	}
 	
+	export class PodDetailEvent {
+	    type: string;
+	    reason: string;
+	    message: string;
+	    count: number;
+	    age: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	        this.count = source["count"];
+	        this.age = source["age"];
+	    }
+	}
 	export class PodDetailCondition {
 	    type: string;
 	    status: string;
@@ -124,12 +144,83 @@ export namespace kube {
 	        this.message = source["message"];
 	    }
 	}
+	export class PodDetailResourceValues {
+	    cpu: string;
+	    memory: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailResourceValues(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
+	    }
+	}
+	export class PodDetailPort {
+	    name: string;
+	    containerPort: number;
+	    protocol: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailPort(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.containerPort = source["containerPort"];
+	        this.protocol = source["protocol"];
+	    }
+	}
+	export class PodDetailVolumeMount {
+	    name: string;
+	    mountPath: string;
+	    readOnly: boolean;
+	    subPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailVolumeMount(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.mountPath = source["mountPath"];
+	        this.readOnly = source["readOnly"];
+	        this.subPath = source["subPath"];
+	    }
+	}
+	export class PodDetailEnvVar {
+	    name: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailEnvVar(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	    }
+	}
 	export class PodDetailContainer {
 	    name: string;
 	    image: string;
+	    imagePullPolicy: string;
+	    containerId: string;
 	    state: string;
 	    ready: boolean;
 	    restarts: number;
+	    command: string[];
+	    args: string[];
+	    env: PodDetailEnvVar[];
+	    mounts: PodDetailVolumeMount[];
+	    ports: PodDetailPort[];
+	    requests: PodDetailResourceValues;
+	    limits: PodDetailResourceValues;
 	
 	    static createFrom(source: any = {}) {
 	        return new PodDetailContainer(source);
@@ -139,10 +230,37 @@ export namespace kube {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.image = source["image"];
+	        this.imagePullPolicy = source["imagePullPolicy"];
+	        this.containerId = source["containerId"];
 	        this.state = source["state"];
 	        this.ready = source["ready"];
 	        this.restarts = source["restarts"];
+	        this.command = source["command"];
+	        this.args = source["args"];
+	        this.env = this.convertValues(source["env"], PodDetailEnvVar);
+	        this.mounts = this.convertValues(source["mounts"], PodDetailVolumeMount);
+	        this.ports = this.convertValues(source["ports"], PodDetailPort);
+	        this.requests = this.convertValues(source["requests"], PodDetailResourceValues);
+	        this.limits = this.convertValues(source["limits"], PodDetailResourceValues);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PodDetailVolume {
 	    name: string;
@@ -196,8 +314,11 @@ export namespace kube {
 	    annotations: Record<string, string>;
 	    ownerReferences: PodDetailOwnerReference[];
 	    volumes: PodDetailVolume[];
+	    initContainers: PodDetailContainer[];
 	    containers: PodDetailContainer[];
 	    conditions: PodDetailCondition[];
+	    events: PodDetailEvent[];
+	    manifest: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new PodDetail(source);
@@ -222,8 +343,11 @@ export namespace kube {
 	        this.annotations = source["annotations"];
 	        this.ownerReferences = this.convertValues(source["ownerReferences"], PodDetailOwnerReference);
 	        this.volumes = this.convertValues(source["volumes"], PodDetailVolume);
+	        this.initContainers = this.convertValues(source["initContainers"], PodDetailContainer);
 	        this.containers = this.convertValues(source["containers"], PodDetailContainer);
 	        this.conditions = this.convertValues(source["conditions"], PodDetailCondition);
+	        this.events = this.convertValues(source["events"], PodDetailEvent);
+	        this.manifest = source["manifest"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -248,6 +372,29 @@ export namespace kube {
 	
 	
 	
+	
+	
+	
+	
+	
+	export class PodLogLine {
+	    container: string;
+	    createdAt: string;
+	    createdAtUnix: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodLogLine(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.container = source["container"];
+	        this.createdAt = source["createdAt"];
+	        this.createdAtUnix = source["createdAtUnix"];
+	        this.message = source["message"];
+	    }
+	}
 	
 	export class WorkloadPhaseCounts {
 	    running: number;

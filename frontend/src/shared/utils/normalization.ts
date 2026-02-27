@@ -4,8 +4,10 @@ import type {
   WorkloadPhaseCounts,
   WorkloadStatuses,
   PodsStreamEvent,
+  PodLogsStreamEvent,
   PodResource,
   PodDetail,
+  PodLogLine,
 } from '../types'
 
 export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
@@ -83,6 +85,90 @@ export function toStreamEvent(data: unknown): PodsStreamEvent {
   }
 }
 
+export function toPodLogsStreamEvent(data: unknown): PodLogsStreamEvent {
+  const record = (data ?? {}) as Record<string, unknown>
+  return {
+    streamId: String(record.streamId ?? ''),
+    clusterFilename: String(record.clusterFilename ?? ''),
+    namespace: String(record.namespace ?? ''),
+    podName: String(record.podName ?? ''),
+    items: toPodLogLines(record.items),
+    updatedAtUnix: Number(record.updatedAtUnix ?? 0),
+    error: record.error ? String(record.error) : undefined,
+  }
+}
+
+function toPodDetailContainer(data: unknown) {
+  const container = (data ?? {}) as Record<string, unknown>
+
+  const env = Array.isArray(container.env)
+    ? container.env.map(item => {
+      const envItem = (item ?? {}) as Record<string, unknown>
+      return {
+        name: String(envItem.name ?? '-'),
+        value: String(envItem.value ?? '-'),
+      }
+    })
+    : []
+
+  const mounts = Array.isArray(container.mounts)
+    ? container.mounts.map(item => {
+      const mountItem = (item ?? {}) as Record<string, unknown>
+      return {
+        name: String(mountItem.name ?? '-'),
+        mountPath: String(mountItem.mountPath ?? '-'),
+        readOnly: Boolean(mountItem.readOnly),
+        subPath: String(mountItem.subPath ?? '-'),
+      }
+    })
+    : []
+
+  const ports = Array.isArray(container.ports)
+    ? container.ports.map(item => {
+      const portItem = (item ?? {}) as Record<string, unknown>
+      return {
+        name: String(portItem.name ?? '-'),
+        containerPort: Number(portItem.containerPort ?? 0),
+        protocol: String(portItem.protocol ?? 'TCP'),
+      }
+    })
+    : []
+
+  const command = Array.isArray(container.command)
+    ? container.command.map(item => String(item ?? ''))
+    : []
+
+  const args = Array.isArray(container.args)
+    ? container.args.map(item => String(item ?? ''))
+    : []
+
+  const requestsRecord = (container.requests ?? {}) as Record<string, unknown>
+  const limitsRecord = (container.limits ?? {}) as Record<string, unknown>
+
+  return {
+    name: String(container.name ?? ''),
+    image: String(container.image ?? '-'),
+    imagePullPolicy: String(container.imagePullPolicy ?? '-'),
+    containerId: String(container.containerId ?? '-'),
+    state: String(container.state ?? 'unknown'),
+    ready: Boolean(container.ready),
+    restarts: Number(container.restarts ?? 0),
+    command,
+    args,
+    env,
+    mounts,
+    ports,
+    requests: {
+      cpu: String(requestsRecord.cpu ?? '-'),
+      memory: String(requestsRecord.memory ?? '-'),
+    },
+    limits: {
+      cpu: String(limitsRecord.cpu ?? '-'),
+      memory: String(limitsRecord.memory ?? '-'),
+    },
+  }
+}
+
 export function toPodDetail(data: unknown): PodDetail {
   const record = (data ?? {}) as Record<string, unknown>
 
@@ -120,16 +206,11 @@ export function toPodDetail(data: unknown): PodDetail {
     : []
 
   const containers = Array.isArray(record.containers)
-    ? record.containers.map(item => {
-      const container = (item ?? {}) as Record<string, unknown>
-      return {
-        name: String(container.name ?? ''),
-        image: String(container.image ?? '-'),
-        state: String(container.state ?? 'unknown'),
-        ready: Boolean(container.ready),
-        restarts: Number(container.restarts ?? 0),
-      }
-    })
+    ? record.containers.map(toPodDetailContainer)
+    : []
+
+  const initContainers = Array.isArray(record.initContainers)
+    ? record.initContainers.map(toPodDetailContainer)
     : []
 
   const conditions = Array.isArray(record.conditions)
@@ -139,6 +220,19 @@ export function toPodDetail(data: unknown): PodDetail {
         type: String(condition.type ?? ''),
         status: String(condition.status ?? ''),
         message: String(condition.message ?? '-'),
+      }
+    })
+    : []
+
+  const events = Array.isArray(record.events)
+    ? record.events.map(item => {
+      const event = (item ?? {}) as Record<string, unknown>
+      return {
+        type: String(event.type ?? '-'),
+        reason: String(event.reason ?? '-'),
+        message: String(event.message ?? '-'),
+        count: Number(event.count ?? 0),
+        age: String(event.age ?? '-'),
       }
     })
     : []
@@ -161,7 +255,26 @@ export function toPodDetail(data: unknown): PodDetail {
     annotations,
     ownerReferences,
     volumes,
+    initContainers,
     containers,
     conditions,
+    events,
+    manifest: String(record.manifest ?? '-'),
   }
+}
+
+export function toPodLogLines(data: unknown): PodLogLine[] {
+  if (!Array.isArray(data)) {
+    return []
+  }
+
+  return data.map(item => {
+    const record = (item ?? {}) as Record<string, unknown>
+    return {
+      container: String(record.container ?? '-'),
+      createdAt: String(record.createdAt ?? '-'),
+      createdAtUnix: Number(record.createdAtUnix ?? 0),
+      message: String(record.message ?? ''),
+    }
+  })
 }

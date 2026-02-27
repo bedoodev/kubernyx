@@ -1,3 +1,12 @@
+import type { PodResource } from '../types'
+
+export function getAgeLabel(item: PodResource, nowUnix: number): string {
+  if (item.createdAtUnix && item.createdAtUnix > 0) {
+    return formatAgeFromUnix(item.createdAtUnix, nowUnix)
+  }
+  return item.age ?? '-'
+}
+
 export function formatCPU(millis: number): string {
   return `${(millis / 1000).toFixed(2)} cores`
 }
@@ -15,6 +24,11 @@ export function toPercent(value: number, total: number): number {
     return 0
   }
   return Math.min((Math.max(0, value) / total) * 100, 100)
+}
+
+export function parsePhase(status: string): string {
+  const phase = status.trim().split(' ')[0]
+  return phase || 'unknown'
 }
 
 export function formatAgeFromUnix(createdAtUnix: number, nowUnix: number): string {

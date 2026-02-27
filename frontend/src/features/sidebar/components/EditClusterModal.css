@@ -1,0 +1,110 @@
+.cluster-edit-modal {
+  width: min(960px, calc(100vw - 56px));
+  max-height: calc(100vh - 56px);
+}
+
+.cluster-edit-modal .modal-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.cluster-edit-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cluster-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cluster-edit-field span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.cluster-edit-field input[type="text"] {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.cluster-edit-field input[type="text"]:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.cluster-edit-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cluster-edit-meta span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.cluster-edit-meta code {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.cluster-edit-loading {
+  padding: 18px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+}
+
+.cluster-edit-yaml {
+  flex: 1;
+  min-width: 0;
+  min-height: clamp(220px, 44vh, 620px);
+  height: auto;
+}
+
+@media (max-width: 960px), (max-height: 820px) {
+  .cluster-edit-modal {
+    width: min(960px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+  }
+
+  .cluster-edit-modal .modal-body {
+    padding: 14px;
+  }
+
+  .cluster-edit-shell {
+    gap: 10px;
+  }
+
+  .cluster-edit-yaml {
+    min-height: clamp(170px, 38vh, 460px);
+  }
+
+  .cluster-edit-modal .modal-actions {
+    margin-top: 12px;
+  }
+}

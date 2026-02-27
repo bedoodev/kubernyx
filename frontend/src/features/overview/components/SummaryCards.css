@@ -104,7 +104,7 @@
 }
 
 .readiness-chip.not-ready {
-  color: #ff8c8c;
+  color: var(--red);
 }
 
 .readiness-chip-dot {

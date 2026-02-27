@@ -15,6 +15,11 @@
   gap: 12px;
   margin-bottom: 14px;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.workloads-view-title {
+  min-width: 0;
 }
 
 .workloads-view-title p {
@@ -24,15 +29,27 @@
 
 .workloads-namespace-filter {
   margin-bottom: 0;
-  flex-shrink: 0;
+  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
 }
 
 .workloads-namespace-filter .ns-filter-row {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
   gap: 10px;
 }
 
 .workloads-namespace-filter .ns-label {
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.workloads-namespace-filter .ns-control {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .workloads-panel {
@@ -74,5 +91,6 @@
 
   .workloads-namespace-filter {
     width: 100%;
+    margin-left: 0;
   }
 }

@@ -12,9 +12,41 @@ export interface PodResource {
 export interface PodDetailContainer {
   name: string;
   image: string;
+  imagePullPolicy: string;
+  containerId: string;
   state: string;
   ready: boolean;
   restarts: number;
+  command: string[];
+  args: string[];
+  env: PodDetailEnvVar[];
+  mounts: PodDetailMount[];
+  ports: PodDetailPort[];
+  requests: PodDetailResources;
+  limits: PodDetailResources;
+}
+
+export interface PodDetailEnvVar {
+  name: string;
+  value: string;
+}
+
+export interface PodDetailMount {
+  name: string;
+  mountPath: string;
+  readOnly: boolean;
+  subPath: string;
+}
+
+export interface PodDetailPort {
+  name: string;
+  containerPort: number;
+  protocol: string;
+}
+
+export interface PodDetailResources {
+  cpu: string;
+  memory: string;
 }
 
 export interface PodDetailCondition {
@@ -54,8 +86,26 @@ export interface PodDetail {
   annotations: Record<string, string>;
   ownerReferences: PodDetailOwnerReference[];
   volumes: PodDetailVolume[];
+  initContainers: PodDetailContainer[];
   containers: PodDetailContainer[];
   conditions: PodDetailCondition[];
+  events: PodDetailEvent[];
+  manifest: string;
+}
+
+export interface PodDetailEvent {
+  type: string;
+  reason: string;
+  message: string;
+  count: number;
+  age: string;
+}
+
+export interface PodLogLine {
+  container: string;
+  createdAt: string;
+  createdAtUnix: number;
+  message: string;
 }
 
 export interface PodsStreamEvent {
@@ -63,6 +113,16 @@ export interface PodsStreamEvent {
   clusterFilename: string;
   items: PodResource[];
   metricsAvailable: boolean;
+  updatedAtUnix: number;
+  error?: string;
+}
+
+export interface PodLogsStreamEvent {
+  streamId: string;
+  clusterFilename: string;
+  namespace: string;
+  podName: string;
+  items: PodLogLine[];
   updatedAtUnix: number;
   error?: string;
 }

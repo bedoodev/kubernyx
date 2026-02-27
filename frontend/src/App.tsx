@@ -1,31 +1,184 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { GetBasePath, SetBasePath, SelectDirectory } from './shared/api'
 import { useSidebarResize } from './shared/hooks/useSidebarResize'
-import { useClusterTabs, getTabDisplayName, truncateWithEllipsis } from './shared/hooks/useClusterTabs'
+import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterTabs'
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
+import { useDragResize } from './shared/hooks/useDragResize'
+import type { ClusterInfo, PodResource } from './shared/types'
 import Setup from './features/setup/Setup'
 import Sidebar from './features/sidebar/Sidebar'
 import Overview from './features/overview/Overview'
 import WorkloadsView from './features/workloads/WorkloadsView'
+import PodDetailPanel, { type PodDetailsTabId } from './features/workloads/pods/components/PodDetailPanel'
+import { usePodDetail } from './features/workloads/pods/hooks/usePodDetail'
+import { usePodLogs } from './features/workloads/pods/hooks/usePodLogs'
 import Settings from './features/settings/Settings'
+import Modal from './shared/components/Modal'
 import './App.css'
 
 type AppView = 'loading' | 'setup' | 'main'
 
 const TAB_NAME_MAX_LENGTH = 20
+const APP_DETAIL_LEFT_MIN_WIDTH = 500
+const APP_DETAIL_MIN_WIDTH = 420
+const WORKLOAD_HINT_MIN_MAIN_WIDTH = 900
+
+interface PodDetailTabState {
+  id: string
+  clusterFilename: string
+  clusterName: string
+  pod: PodResource
+  pinned: boolean
+}
+
+function getPodDetailTabId(clusterFilename: string, pod: PodResource): string {
+  return `pod:${clusterFilename}:${pod.namespace}:${pod.name}`
+}
+
+function getPodRowKey(pod: PodResource): string {
+  return `${pod.namespace}/${pod.name}`
+}
+
+function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
+  return `${tab.pod.name} < ${tab.clusterName} >`
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function getSplitMaxWidth(totalWidth: number): number {
+  return Math.max(APP_DETAIL_MIN_WIDTH, totalWidth - APP_DETAIL_LEFT_MIN_WIDTH)
+}
 
 export default function App() {
   const [view, setView] = useState<AppView>('loading')
   const [showSettings, setShowSettings] = useState(false)
   const sidebar = useSidebarResize({ default: 260, min: 220, max: 520 })
   const clusterTabs = useClusterTabs({ showSettings })
+  const [podDetailTabs, setPodDetailTabs] = useState<PodDetailTabState[]>([])
+  const [activePodDetailTabId, setActivePodDetailTabId] = useState<string | null>(null)
+  const [detailPanelTabByPodTabId, setDetailPanelTabByPodTabId] = useState<Record<string, PodDetailsTabId>>({})
+  const [detailPanelWidth, setDetailPanelWidth] = useState(560)
+  const [detailPanelMaximized, setDetailPanelMaximized] = useState(false)
+  const [mainBodyWidth, setMainBodyWidth] = useState(0)
+  const mainBodyRef = useRef<HTMLDivElement | null>(null)
+  const detailsResize = useDragResize({ onUpdate: setDetailPanelWidth, invertDelta: true })
+
+  const activePodDetailTab = useMemo(
+    () => (activePodDetailTabId ? (podDetailTabs.find(tab => tab.id === activePodDetailTabId) ?? null) : null),
+    [activePodDetailTabId, podDetailTabs],
+  )
+
+  const activePodDetailPanelTab = activePodDetailTab
+    ? (detailPanelTabByPodTabId[activePodDetailTab.id] ?? 'overview')
+    : 'overview'
+
+  const { podDetail, podDetailLoading, podDetailError } = usePodDetail(
+    activePodDetailTab?.clusterFilename ?? '',
+    activePodDetailTab?.pod ?? null,
+  )
+  const { podLogs, podLogsLoading, podLogsError, podLogsLoadingOlder, loadOlderLogs } = usePodLogs(
+    activePodDetailTab?.clusterFilename ?? '',
+    activePodDetailTab?.pod ?? null,
+    Boolean(activePodDetailTab && activePodDetailPanelTab === 'logs'),
+  )
+
+  const handleClosePodDetailTab = useCallback((tabId: string) => {
+    setPodDetailTabs(current => {
+      const idx = current.findIndex(tab => tab.id === tabId)
+      if (idx < 0) {
+        return current
+      }
+
+      const next = current.filter(tab => tab.id !== tabId)
+      setActivePodDetailTabId(currentActive => {
+        if (currentActive !== tabId) {
+          return currentActive
+        }
+        const fallback = next[idx] ?? next[idx - 1] ?? null
+        return fallback ? fallback.id : null
+      })
+
+      return next
+    })
+    setDetailPanelTabByPodTabId(current => {
+      if (!Object.prototype.hasOwnProperty.call(current, tabId)) {
+        return current
+      }
+      const next = { ...current }
+      delete next[tabId]
+      return next
+    })
+    if (activePodDetailTabId === tabId) {
+      setDetailPanelMaximized(false)
+    }
+  }, [activePodDetailTabId])
+
+  const handleActivatePodDetail = useCallback((cluster: ClusterInfo, pod: PodResource, options: { pin: boolean }) => {
+    const tabId = getPodDetailTabId(cluster.filename, pod)
+    const inheritedDetailTab: PodDetailsTabId = activePodDetailTabId
+      ? (detailPanelTabByPodTabId[activePodDetailTabId] ?? 'overview')
+      : 'overview'
+    setShowSettings(false)
+
+    setPodDetailTabs(current => {
+      const existingIndex = current.findIndex(tab => tab.id === tabId)
+      if (existingIndex >= 0) {
+        const next = [...current]
+        next[existingIndex] = {
+          ...next[existingIndex],
+          clusterName: cluster.name,
+          pod,
+          pinned: next[existingIndex].pinned || options.pin,
+        }
+        return next
+      }
+
+      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      return [
+        ...base,
+        {
+          id: tabId,
+          clusterFilename: cluster.filename,
+          clusterName: cluster.name,
+          pod,
+          pinned: options.pin,
+        },
+      ]
+    })
+
+    setActivePodDetailTabId(tabId)
+    if (podDetailTabs.length === 0) {
+      const mainBody = mainBodyRef.current
+      if (mainBody) {
+        const totalWidth = mainBody.clientWidth
+        const maxWidth = getSplitMaxWidth(totalWidth)
+        const halfWidth = Math.floor(totalWidth / 2)
+        setDetailPanelWidth(clamp(halfWidth, APP_DETAIL_MIN_WIDTH, maxWidth))
+      }
+    }
+    setDetailPanelTabByPodTabId(current => (
+      Object.prototype.hasOwnProperty.call(current, tabId)
+        ? current
+        : { ...current, [tabId]: inheritedDetailTab }
+    ))
+  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+
+  const handlePodDetailPanelTabChange = useCallback((tab: PodDetailsTabId) => {
+    if (!activePodDetailTabId) {
+      return
+    }
+    setDetailPanelTabByPodTabId(current => ({ ...current, [activePodDetailTabId]: tab }))
+  }, [activePodDetailTabId])
 
   useKeyboardShortcuts({
     enabled: view === 'main',
     showSettings,
-    activeTabId: clusterTabs.activeTabId,
+    activeTabId: activePodDetailTabId,
     onCloseSettings: () => setShowSettings(false),
-    onCloseTab: clusterTabs.handleCloseTab,
+    onCloseTab: handleClosePodDetailTab,
     onToggleSidebar: sidebar.onToggle,
   })
 
@@ -39,6 +192,98 @@ export default function App() {
       }
     }).catch(() => setView('setup'))
   }, [])
+
+  useEffect(() => {
+    if (!activePodDetailTabId) {
+      return
+    }
+    if (podDetailTabs.some(tab => tab.id === activePodDetailTabId)) {
+      return
+    }
+    setActivePodDetailTabId(podDetailTabs[0]?.id ?? null)
+  }, [activePodDetailTabId, podDetailTabs])
+
+  useEffect(() => {
+    const clusterNamesByFilename = new Map(clusterTabs.clusters.map(cluster => [cluster.filename, cluster.name]))
+    setPodDetailTabs(current => current.flatMap(tab => {
+      const nextClusterName = clusterNamesByFilename.get(tab.clusterFilename)
+      if (!nextClusterName) {
+        return []
+      }
+      if (nextClusterName === tab.clusterName) {
+        return [tab]
+      }
+      return [{ ...tab, clusterName: nextClusterName }]
+    }))
+  }, [clusterTabs.clusters])
+
+  useEffect(() => {
+    const validTabIds = new Set(podDetailTabs.map(tab => tab.id))
+    setDetailPanelTabByPodTabId(current => {
+      let changed = false
+      const next: Record<string, PodDetailsTabId> = {}
+      for (const [tabId, value] of Object.entries(current)) {
+        if (!validTabIds.has(tabId)) {
+          changed = true
+          continue
+        }
+        next[tabId] = value
+      }
+      return changed ? next : current
+    })
+  }, [podDetailTabs])
+
+  useEffect(() => {
+    if (!activePodDetailTab) {
+      setDetailPanelMaximized(false)
+      return
+    }
+
+    const syncDetailWidth = () => {
+      const mainBody = mainBodyRef.current
+      if (!mainBody) {
+        return
+      }
+      const totalWidth = mainBody.clientWidth
+      const maxWidth = getSplitMaxWidth(totalWidth)
+      setDetailPanelWidth(current => clamp(current, APP_DETAIL_MIN_WIDTH, maxWidth))
+    }
+
+    syncDetailWidth()
+    window.addEventListener('resize', syncDetailWidth)
+    return () => window.removeEventListener('resize', syncDetailWidth)
+  }, [activePodDetailTab])
+
+  useEffect(() => {
+    const mainBody = mainBodyRef.current
+    if (!mainBody) {
+      return
+    }
+
+    const syncWidth = () => setMainBodyWidth(mainBody.clientWidth)
+    syncWidth()
+
+    const observer = new ResizeObserver(() => syncWidth())
+    observer.observe(mainBody)
+
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (podDetailTabs.length !== 0) {
+      return
+    }
+
+    const mainBody = mainBodyRef.current
+    if (!mainBody) {
+      return
+    }
+
+    const totalWidth = mainBody.clientWidth
+    const maxWidth = getSplitMaxWidth(totalWidth)
+    const defaultHalf = clamp(Math.floor(totalWidth / 2), APP_DETAIL_MIN_WIDTH, maxWidth)
+    setDetailPanelWidth(defaultHalf)
+  }, [podDetailTabs.length])
 
   const handleSetup = async () => {
     try {
@@ -57,11 +302,6 @@ export default function App() {
     clusterTabs.handleSelectCluster(...args)
   }
 
-  const handleActivateTab: typeof clusterTabs.handleActivateTab = (tabId) => {
-    setShowSettings(false)
-    clusterTabs.handleActivateTab(tabId)
-  }
-
   if (view === 'loading') {
     return <div className="app-loading"><div className="spinner" /></div>
   }
@@ -71,6 +311,30 @@ export default function App() {
   }
 
   const { activeTab } = clusterTabs
+  const activePodKey = (activeTab?.section === 'workloads'
+    && activeTab.workloadTab === 'pods'
+    && activePodDetailTab
+    && activePodDetailTab.clusterFilename === activeTab.cluster.filename)
+    ? getPodRowKey(activePodDetailTab.pod)
+    : null
+  const splitMainContentWidth = Math.max(0, mainBodyWidth - detailPanelWidth)
+  const hideWorkloadsHeaderHint = Boolean(
+    activePodDetailTab
+      && !detailPanelMaximized
+      && splitMainContentWidth > 0
+      && splitMainContentWidth < WORKLOAD_HINT_MIN_MAIN_WIDTH,
+  )
+
+  const handleDetailsResizeStart = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const mainBody = mainBodyRef.current
+    if (!mainBody) {
+      return
+    }
+
+    const totalWidth = mainBody.clientWidth
+    const maxWidth = getSplitMaxWidth(totalWidth)
+    detailsResize.start(event, detailPanelWidth, APP_DETAIL_MIN_WIDTH, maxWidth)
+  }
 
   return (
     <div className={`app-layout ${sidebar.sidebarResizing ? 'resizing' : ''} ${sidebar.sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -102,6 +366,8 @@ export default function App() {
             onAdd={clusterTabs.handleAddCluster}
             onRename={clusterTabs.handleRenameCluster}
             onDelete={clusterTabs.handleDeleteCluster}
+            onReadConfig={clusterTabs.handleGetClusterConfig}
+            onUpdateConfig={clusterTabs.handleUpdateClusterConfig}
             onSettingsClick={() => setShowSettings(true)}
           />
           <div
@@ -114,32 +380,35 @@ export default function App() {
         </>
       )}
       <main className="main-panel">
-        {clusterTabs.tabs.length > 0 && (
+        {podDetailTabs.length > 0 && (
           <div className="cluster-tabs">
-            {clusterTabs.tabs.map(tab => {
-              const fullTabName = getTabDisplayName(tab)
+            {podDetailTabs.map(tab => {
+              const fullTabName = getPodDetailTabDisplayName(tab)
               const tabName = truncateWithEllipsis(fullTabName, TAB_NAME_MAX_LENGTH)
               return (
                 <div
                   key={tab.id}
-                  className={`cluster-tab ${clusterTabs.activeTabId === tab.id ? 'active' : ''}`}
-                  onClick={() => handleActivateTab(tab.id)}
+                  className={`cluster-tab ${activePodDetailTabId === tab.id ? 'active' : ''}`}
+                  onClick={() => setActivePodDetailTabId(tab.id)}
                   title={fullTabName}
                 >
-                  {tab.section === 'overview' && (
-                    <span className={`cluster-tab-dot ${tab.cluster.healthStatus ?? 'red'}`} />
+                  {tab.pinned && (
+                    <span className="cluster-tab-pin" title="Pinned detail tab">•</span>
                   )}
-                  <span className={`cluster-tab-name ${tab.hasActivity ? '' : 'inactive'}`}>{tabName}</span>
+                  <span className="cluster-tab-name">{tabName}</span>
                   <button
                     type="button"
                     className="cluster-tab-close"
                     onClick={event => {
                       event.stopPropagation()
-                      clusterTabs.handleCloseTab(tab.id)
+                      handleClosePodDetailTab(tab.id)
                     }}
                     aria-label={`Close ${fullTabName} tab`}
                   >
-                    x
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6L6 18" />
+                      <path d="M6 6l12 12" />
+                    </svg>
                   </button>
                 </div>
               )
@@ -147,65 +416,110 @@ export default function App() {
           </div>
         )}
 
-        <div className="main-content">
-          {!activeTab ? (
-            <div className="empty-state">
-              <div className="empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-                  <path d="M2 17l10 5 10-5"/>
-                  <path d="M2 12l10 5 10-5"/>
-                </svg>
+        <div className={`main-body ${detailsResize.isResizing ? 'resizing' : ''}`} ref={mainBodyRef}>
+          <div className="main-content">
+            {!activeTab ? (
+              <div className="empty-state">
+                <div className="empty-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                    <path d="M2 17l10 5 10-5"/>
+                    <path d="M2 12l10 5 10-5"/>
+                  </svg>
+                </div>
+                <h2>Select a cluster</h2>
+                <p>Expand a cluster from the sidebar and select Overview or a Workload type</p>
               </div>
-              <h2>Select a cluster</h2>
-              <p>Expand a cluster from the sidebar and select Overview or a Workload type</p>
-            </div>
-          ) : activeTab.section === 'workloads' ? (
-            <WorkloadsView
-              cluster={activeTab.cluster}
-              activeTab={activeTab.workloadTab}
-              namespaces={clusterTabs.activeWorkloadNamespaceOptions}
-              selectedNamespaces={clusterTabs.activeWorkloadNamespaces}
-              onNamespacesChange={clusterTabs.handleWorkloadNamespacesChange}
-            />
-          ) : (
-            <Overview
-              cluster={activeTab.cluster}
-              overview={activeTab.overview}
-              workloads={activeTab.workloads}
-              nodeFilter={activeTab.nodeFilter}
-              selectedNamespaces={activeTab.selectedNamespaces}
-              loading={activeTab.loading}
-              error={activeTab.error}
-              onNodeFilterChange={clusterTabs.handleNodeFilterChange}
-              onNamespacesChange={clusterTabs.handleNamespacesChange}
-            />
+            ) : activeTab.section === 'workloads' ? (
+              <WorkloadsView
+                cluster={activeTab.cluster}
+                activeTab={activeTab.workloadTab}
+                namespaces={clusterTabs.activeWorkloadNamespaceOptions}
+                selectedNamespaces={clusterTabs.activeWorkloadNamespaces}
+                onNamespacesChange={clusterTabs.handleWorkloadNamespacesChange}
+                activePodKey={activePodKey}
+                hideNamespaceHint={hideWorkloadsHeaderHint}
+                onPodActivate={(pod, options) => handleActivatePodDetail(activeTab.cluster, pod, options)}
+              />
+            ) : (
+              <Overview
+                cluster={activeTab.cluster}
+                overview={activeTab.overview}
+                workloads={activeTab.workloads}
+                nodeFilter={activeTab.nodeFilter}
+                selectedNamespaces={activeTab.selectedNamespaces}
+                loading={activeTab.loading}
+                error={activeTab.error}
+                onNodeFilterChange={clusterTabs.handleNodeFilterChange}
+                onNamespacesChange={clusterTabs.handleNamespacesChange}
+              />
+            )}
+          </div>
+
+          {activePodDetailTab && !detailPanelMaximized && (
+            <>
+              <button
+                type="button"
+                className="app-detail-split-resizer"
+                onMouseDown={handleDetailsResizeStart}
+                aria-label="Resize details panel"
+              />
+              <aside className="app-pod-detail-pane" style={{ width: `${detailPanelWidth}px`, minWidth: `${detailPanelWidth}px` }}>
+                <PodDetailPanel
+                  clusterFilename={activePodDetailTab.clusterFilename}
+                  mode="split"
+                  activeDetailsTab={activePodDetailPanelTab}
+                  onDetailsTabChange={handlePodDetailPanelTabChange}
+                  selectedPod={activePodDetailTab.pod}
+                  podDetail={podDetail}
+                  podDetailLoading={podDetailLoading}
+                  podDetailError={podDetailError}
+                  podLogs={podLogs}
+                  podLogsLoading={podLogsLoading}
+                  podLogsError={podLogsError}
+                  podLogsLoadingOlder={podLogsLoadingOlder}
+                  onLoadOlderLogs={loadOlderLogs}
+                  detailsMaximized={detailPanelMaximized}
+                  showMaximizeButton
+                  onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                  onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+                />
+              </aside>
+            </>
           )}
         </div>
+
+        {activePodDetailTab && detailPanelMaximized && (
+          <div className="app-pod-detail-modal-overlay" onClick={() => setDetailPanelMaximized(false)}>
+            <div className="app-pod-detail-modal" onClick={event => event.stopPropagation()}>
+              <PodDetailPanel
+                clusterFilename={activePodDetailTab.clusterFilename}
+                mode="modal"
+                activeDetailsTab={activePodDetailPanelTab}
+                onDetailsTabChange={handlePodDetailPanelTabChange}
+                selectedPod={activePodDetailTab.pod}
+                podDetail={podDetail}
+                podDetailLoading={podDetailLoading}
+                podDetailError={podDetailError}
+                podLogs={podLogs}
+                podLogsLoading={podLogsLoading}
+                podLogsError={podLogsError}
+                podLogsLoadingOlder={podLogsLoadingOlder}
+                onLoadOlderLogs={loadOlderLogs}
+                detailsMaximized={detailPanelMaximized}
+                showMaximizeButton
+                onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+              />
+            </div>
+          </div>
+        )}
       </main>
 
       {showSettings && (
-        <div className="app-modal-overlay" onClick={() => setShowSettings(false)}>
-          <div className="app-modal-shell settings-modal-shell" onClick={event => event.stopPropagation()}>
-            <div className="app-modal-header">
-              <h3>Settings</h3>
-              <button
-                type="button"
-                className="app-modal-close"
-                onClick={() => setShowSettings(false)}
-                aria-label="Close settings"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 6L6 18" />
-                  <path d="M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="app-modal-body">
-              <Settings onPathChanged={clusterTabs.loadClusters} embedded />
-            </div>
-          </div>
-        </div>
+        <Modal title="Settings" onClose={() => setShowSettings(false)}>
+          <Settings onPathChanged={clusterTabs.loadClusters} embedded />
+        </Modal>
       )}
     </div>
   )

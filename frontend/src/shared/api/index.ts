@@ -9,8 +9,14 @@ export {
   AddCluster,
   RenameCluster,
   DeleteCluster,
+  GetClusterConfig,
+  UpdateClusterConfig,
   GetPodDetails,
+  GetPodLogs,
+  SavePodLogsFile,
+  StartPodLogsStream,
   StartPodsStream,
+  StopPodLogsStream,
   StopPodsStream,
 } from '../../../wailsjs/go/main/App'
 

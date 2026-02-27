@@ -1,6 +1,5 @@
-import { useMemo } from 'react'
 import { WORKLOAD_TAB_OPTIONS } from '../../shared/types'
-import type { ClusterInfo, WorkloadTabId } from '../../shared/types'
+import type { ClusterInfo, PodResource, WorkloadTabId } from '../../shared/types'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
 import PodsTable from './pods/PodsTable'
 import './WorkloadsView.css'
@@ -11,20 +10,31 @@ interface Props {
   namespaces: string[]
   selectedNamespaces: string[]
   onNamespacesChange: (ns: string[]) => void
+  activePodKey: string | null
+  hideNamespaceHint?: boolean
+  onPodActivate: (pod: PodResource, options: { pin: boolean }) => void
 }
 
-export default function WorkloadsView({ cluster, activeTab, namespaces, selectedNamespaces, onNamespacesChange }: Props) {
-  const activeLabel = useMemo(
-    () => WORKLOAD_TAB_OPTIONS.find(tab => tab.id === activeTab)?.label ?? 'Workloads',
-    [activeTab],
-  )
+export default function WorkloadsView({
+  cluster,
+  activeTab,
+  namespaces,
+  selectedNamespaces,
+  onNamespacesChange,
+  activePodKey,
+  hideNamespaceHint = false,
+  onPodActivate,
+}: Props) {
+  const activeLabel = WORKLOAD_TAB_OPTIONS.find(tab => tab.id === activeTab)?.label ?? 'Workloads'
 
   return (
     <div className="workloads-view">
       <div className="workloads-view-header">
-        <div className="workloads-view-title">
-          <p>Select one or more namespaces to list resources.</p>
-        </div>
+        {!hideNamespaceHint && (
+          <div className="workloads-view-title">
+            <p>Select one or more namespaces to list resources.</p>
+          </div>
+        )}
         <NamespaceFilter
           className="workloads-namespace-filter"
           namespaces={namespaces}
@@ -38,6 +48,9 @@ export default function WorkloadsView({ cluster, activeTab, namespaces, selected
           <PodsTable
             clusterFilename={cluster.filename}
             selectedNamespaces={selectedNamespaces}
+            showInlineDetails={false}
+            externalSelectedPodKey={activePodKey}
+            onPodActivate={onPodActivate}
           />
         ) : (
           <>
