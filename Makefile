@@ -1,8 +1,8 @@
 WAILS := $(shell which wails 2>/dev/null || echo $(HOME)/go/bin/wails)
-CLEAN_TARGETS := build/bin frontend/dist frontend/node_modules
+CLEAN_TARGETS := build/bin frontend/dist
 CLEAN_GLOBS := $(CLEAN_TARGETS) frontend/node_modules.corrupt.* frontend/node_modules.__deleting.*
 
-.PHONY: dev build clean clean-sync repair-node-modules
+.PHONY: dev build clean clean-sync clean-deps repair-node-modules
 
 dev: repair-node-modules
 	$(WAILS) dev
@@ -25,6 +25,9 @@ clean:
 
 clean-sync:
 	rm -rf $(CLEAN_GLOBS)
+
+clean-deps:
+	rm -rf frontend/node_modules frontend/node_modules.corrupt.* frontend/node_modules.__deleting.*
 
 repair-node-modules:
 	@set -eu; \

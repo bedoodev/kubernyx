@@ -13,6 +13,7 @@ export {
   UpdateClusterConfig,
   GetPodDetails,
   GetPodLogs,
+  ExecPodCommand,
   SavePodLogsFile,
   StartPodLogsStream,
   StartPodsStream,

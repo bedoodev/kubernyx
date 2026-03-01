@@ -11,7 +11,6 @@ interface Props {
   selectedNamespaces: string[]
   onNamespacesChange: (ns: string[]) => void
   activePodKey: string | null
-  hideNamespaceHint?: boolean
   onPodActivate: (pod: PodResource, options: { pin: boolean }) => void
 }
 
@@ -22,7 +21,6 @@ export default function WorkloadsView({
   selectedNamespaces,
   onNamespacesChange,
   activePodKey,
-  hideNamespaceHint = false,
   onPodActivate,
 }: Props) {
   const activeLabel = WORKLOAD_TAB_OPTIONS.find(tab => tab.id === activeTab)?.label ?? 'Workloads'
@@ -30,11 +28,9 @@ export default function WorkloadsView({
   return (
     <div className="workloads-view">
       <div className="workloads-view-header">
-        {!hideNamespaceHint && (
-          <div className="workloads-view-title">
-            <p>Select one or more namespaces to list resources.</p>
-          </div>
-        )}
+        <div className="workloads-view-title">
+          <p>Select one or more namespaces to list resources.</p>
+        </div>
         <NamespaceFilter
           className="workloads-namespace-filter"
           namespaces={namespaces}

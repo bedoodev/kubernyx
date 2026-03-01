@@ -302,6 +302,15 @@ export namespace kube {
 	    status: string;
 	    phase: string;
 	    age: string;
+	    cpuUsage: string;
+	    memoryUsage: string;
+	    cpuUsageMilli: number;
+	    memoryUsageBytes: number;
+	    cpuRequestsMilli: number;
+	    cpuLimitsMilli: number;
+	    memoryRequestsBytes: number;
+	    memoryLimitsBytes: number;
+	    metricsAvailable: boolean;
 	    podIP: string;
 	    node: string;
 	    qosClass: string;
@@ -331,6 +340,15 @@ export namespace kube {
 	        this.status = source["status"];
 	        this.phase = source["phase"];
 	        this.age = source["age"];
+	        this.cpuUsage = source["cpuUsage"];
+	        this.memoryUsage = source["memoryUsage"];
+	        this.cpuUsageMilli = source["cpuUsageMilli"];
+	        this.memoryUsageBytes = source["memoryUsageBytes"];
+	        this.cpuRequestsMilli = source["cpuRequestsMilli"];
+	        this.cpuLimitsMilli = source["cpuLimitsMilli"];
+	        this.memoryRequestsBytes = source["memoryRequestsBytes"];
+	        this.memoryLimitsBytes = source["memoryLimitsBytes"];
+	        this.metricsAvailable = source["metricsAvailable"];
 	        this.podIP = source["podIP"];
 	        this.node = source["node"];
 	        this.qosClass = source["qosClass"];
@@ -377,6 +395,26 @@ export namespace kube {
 	
 	
 	
+	export class PodExecResult {
+	    container: string;
+	    command: string;
+	    stdout: string;
+	    stderr: string;
+	    exitCode: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodExecResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.container = source["container"];
+	        this.command = source["command"];
+	        this.stdout = source["stdout"];
+	        this.stderr = source["stderr"];
+	        this.exitCode = source["exitCode"];
+	    }
+	}
 	export class PodLogLine {
 	    container: string;
 	    createdAt: string;

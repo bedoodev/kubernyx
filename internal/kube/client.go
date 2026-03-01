@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	metricsv1beta1 "k8s.io/metrics/pkg/client/clientset/versioned"
 )
@@ -13,6 +14,7 @@ import (
 type Client struct {
 	clientset *kubernetes.Clientset
 	metrics   *metricsv1beta1.Clientset
+	config    *rest.Config
 	nodes     []corev1.Node
 }
 
@@ -40,5 +42,5 @@ func NewClientWithTimeout(kubeconfigPath string, timeout time.Duration) (*Client
 
 	mc, _ := metricsv1beta1.NewForConfig(config)
 
-	return &Client{clientset: cs, metrics: mc}, nil
+	return &Client{clientset: cs, metrics: mc, config: config}, nil
 }

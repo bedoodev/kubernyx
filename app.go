@@ -174,6 +174,21 @@ func (a *App) GetPodLogs(filename string, namespace string, podName string, cont
 	return client.GetPodLogs(a.ctx, namespace, podName, container, 0)
 }
 
+// ExecPodCommand executes a shell command inside a pod container.
+func (a *App) ExecPodCommand(filename string, namespace string, podName string, container string, command string) (*kube.PodExecResult, error) {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.ExecPodCommand(a.ctx, namespace, podName, container, command)
+}
+
 // SavePodLogsFile opens a save dialog and writes log content to disk.
 func (a *App) SavePodLogsFile(defaultFilename string, content string) (string, error) {
 	if strings.TrimSpace(content) == "" {

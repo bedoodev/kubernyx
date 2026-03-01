@@ -4,6 +4,7 @@ import { GetBasePath, SetBasePath, SelectDirectory } from './shared/api'
 import { useSidebarResize } from './shared/hooks/useSidebarResize'
 import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterTabs'
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
+import { useShortcutSettings } from './shared/hooks/useShortcutSettings'
 import { useDragResize } from './shared/hooks/useDragResize'
 import type { ClusterInfo, PodResource } from './shared/types'
 import Setup from './features/setup/Setup'
@@ -22,7 +23,6 @@ type AppView = 'loading' | 'setup' | 'main'
 const TAB_NAME_MAX_LENGTH = 20
 const APP_DETAIL_LEFT_MIN_WIDTH = 500
 const APP_DETAIL_MIN_WIDTH = 420
-const WORKLOAD_HINT_MIN_MAIN_WIDTH = 900
 
 interface PodDetailTabState {
   id: string
@@ -53,6 +53,7 @@ function getSplitMaxWidth(totalWidth: number): number {
 }
 
 export default function App() {
+  const { shortcuts, updateShortcut, resetAll: resetShortcuts } = useShortcutSettings()
   const [view, setView] = useState<AppView>('loading')
   const [showSettings, setShowSettings] = useState(false)
   const sidebar = useSidebarResize({ default: 260, min: 220, max: 520 })
@@ -62,9 +63,22 @@ export default function App() {
   const [detailPanelTabByPodTabId, setDetailPanelTabByPodTabId] = useState<Record<string, PodDetailsTabId>>({})
   const [detailPanelWidth, setDetailPanelWidth] = useState(560)
   const [detailPanelMaximized, setDetailPanelMaximized] = useState(false)
+  const [detailPanelMinimized, setDetailPanelMinimized] = useState(false)
+  const [detailPanelWidthBeforeMinimize, setDetailPanelWidthBeforeMinimize] = useState(560)
   const [mainBodyWidth, setMainBodyWidth] = useState(0)
   const mainBodyRef = useRef<HTMLDivElement | null>(null)
-  const detailsResize = useDragResize({ onUpdate: setDetailPanelWidth, invertDelta: true })
+  const sidebarRef = useRef<HTMLDivElement | null>(null)
+  const handleCollapseSnap = useCallback(() => {
+    if (!detailPanelMinimized) {
+      setDetailPanelWidthBeforeMinimize(detailPanelWidth)
+      setDetailPanelWidth(0)
+      setDetailPanelMinimized(true)
+    }
+  }, [detailPanelMinimized, detailPanelWidth])
+  const handleExpandSnap = useCallback(() => {
+    setDetailPanelMinimized(false)
+  }, [])
+  const detailsResize = useDragResize({ onUpdate: setDetailPanelWidth, invertDelta: true, onCollapseSnap: handleCollapseSnap, onExpandSnap: handleExpandSnap })
 
   const activePodDetailTab = useMemo(
     () => (activePodDetailTabId ? (podDetailTabs.find(tab => tab.id === activePodDetailTabId) ?? null) : null),
@@ -113,8 +127,12 @@ export default function App() {
     })
     if (activePodDetailTabId === tabId) {
       setDetailPanelMaximized(false)
+      if (detailPanelMinimized) {
+        setDetailPanelWidth(detailPanelWidthBeforeMinimize)
+        setDetailPanelMinimized(false)
+      }
     }
-  }, [activePodDetailTabId])
+  }, [activePodDetailTabId, detailPanelMinimized, detailPanelWidthBeforeMinimize])
 
   const handleActivatePodDetail = useCallback((cluster: ClusterInfo, pod: PodResource, options: { pin: boolean }) => {
     const tabId = getPodDetailTabId(cluster.filename, pod)
@@ -173,13 +191,39 @@ export default function App() {
     setDetailPanelTabByPodTabId(current => ({ ...current, [activePodDetailTabId]: tab }))
   }, [activePodDetailTabId])
 
+  const handleToggleDetailMinimize = useCallback(() => {
+    if (detailPanelMinimized) {
+      setDetailPanelWidth(detailPanelWidthBeforeMinimize)
+      setDetailPanelMinimized(false)
+    } else {
+      setDetailPanelWidthBeforeMinimize(detailPanelWidth)
+      setDetailPanelWidth(48)
+      setDetailPanelMinimized(true)
+    }
+  }, [detailPanelMinimized, detailPanelWidth, detailPanelWidthBeforeMinimize])
+
+  const handleEscapeNav = useCallback(() => {
+    if (activePodDetailTabId) {
+      handleClosePodDetailTab(activePodDetailTabId)
+      const podsTableWrap = document.querySelector('.pods-table-wrap') as HTMLElement | null
+      podsTableWrap?.focus()
+      return
+    }
+    const clusterList = sidebarRef.current?.querySelector('.cluster-list') as HTMLElement | null
+    clusterList?.focus()
+  }, [activePodDetailTabId, handleClosePodDetailTab])
+
   useKeyboardShortcuts({
     enabled: view === 'main',
+    shortcuts,
     showSettings,
     activeTabId: activePodDetailTabId,
+    hasDetailPanel: Boolean(activePodDetailTab),
     onCloseSettings: () => setShowSettings(false),
     onCloseTab: handleClosePodDetailTab,
     onToggleSidebar: sidebar.onToggle,
+    onToggleDetailMinimize: handleToggleDetailMinimize,
+    onEscapeNav: handleEscapeNav,
   })
 
   useEffect(() => {
@@ -317,13 +361,6 @@ export default function App() {
     && activePodDetailTab.clusterFilename === activeTab.cluster.filename)
     ? getPodRowKey(activePodDetailTab.pod)
     : null
-  const splitMainContentWidth = Math.max(0, mainBodyWidth - detailPanelWidth)
-  const hideWorkloadsHeaderHint = Boolean(
-    activePodDetailTab
-      && !detailPanelMaximized
-      && splitMainContentWidth > 0
-      && splitMainContentWidth < WORKLOAD_HINT_MIN_MAIN_WIDTH,
-  )
 
   const handleDetailsResizeStart = (event: ReactMouseEvent<HTMLButtonElement>) => {
     const mainBody = mainBodyRef.current
@@ -336,9 +373,11 @@ export default function App() {
     detailsResize.start(event, detailPanelWidth, APP_DETAIL_MIN_WIDTH, maxWidth)
   }
 
+
+
   return (
     <div className={`app-layout ${sidebar.sidebarResizing ? 'resizing' : ''} ${sidebar.sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      {sidebar.sidebarCollapsed ? (
+      {sidebar.sidebarCollapsed && !sidebar.sidebarResizing ? (
         <button
           type="button"
           className="sidebar-collapsed-toggle"
@@ -355,7 +394,8 @@ export default function App() {
       ) : (
         <>
           <Sidebar
-            width={sidebar.sidebarWidth}
+            ref={sidebarRef}
+            width={sidebar.sidebarCollapsed ? 0 : sidebar.sidebarWidth}
             clusters={clusterTabs.clusters}
             activeCluster={activeTab?.cluster ?? null}
             activeSection={activeTab?.section ?? null}
@@ -438,7 +478,6 @@ export default function App() {
                 selectedNamespaces={clusterTabs.activeWorkloadNamespaces}
                 onNamespacesChange={clusterTabs.handleWorkloadNamespacesChange}
                 activePodKey={activePodKey}
-                hideNamespaceHint={hideWorkloadsHeaderHint}
                 onPodActivate={(pod, options) => handleActivatePodDetail(activeTab.cluster, pod, options)}
               />
             ) : (
@@ -456,69 +495,83 @@ export default function App() {
             )}
           </div>
 
-          {activePodDetailTab && !detailPanelMaximized && (
+          {activePodDetailTab && (
             <>
-              <button
-                type="button"
-                className="app-detail-split-resizer"
-                onMouseDown={handleDetailsResizeStart}
-                aria-label="Resize details panel"
-              />
-              <aside className="app-pod-detail-pane" style={{ width: `${detailPanelWidth}px`, minWidth: `${detailPanelWidth}px` }}>
-                <PodDetailPanel
-                  clusterFilename={activePodDetailTab.clusterFilename}
-                  mode="split"
-                  activeDetailsTab={activePodDetailPanelTab}
-                  onDetailsTabChange={handlePodDetailPanelTabChange}
-                  selectedPod={activePodDetailTab.pod}
-                  podDetail={podDetail}
-                  podDetailLoading={podDetailLoading}
-                  podDetailError={podDetailError}
-                  podLogs={podLogs}
-                  podLogsLoading={podLogsLoading}
-                  podLogsError={podLogsError}
-                  podLogsLoadingOlder={podLogsLoadingOlder}
-                  onLoadOlderLogs={loadOlderLogs}
-                  detailsMaximized={detailPanelMaximized}
-                  showMaximizeButton
-                  onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
-                  onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+              {!detailPanelMaximized && (!detailPanelMinimized || detailsResize.isResizing) && (
+                <button
+                  type="button"
+                  className="app-detail-split-resizer"
+                  onMouseDown={handleDetailsResizeStart}
+                  aria-label="Resize details panel"
                 />
-              </aside>
+              )}
+              {detailPanelMinimized && !detailPanelMaximized && !detailsResize.isResizing ? (
+                <button
+                  type="button"
+                  className="app-detail-collapsed-tab"
+                  onClick={handleToggleDetailMinimize}
+                  title="Expand detail panel (Cmd+D)"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+              ) : (
+                <aside
+                  className={`app-pod-detail-pane ${detailPanelMaximized ? 'is-maximized' : ''}`}
+                  style={detailPanelMaximized ? undefined : { width: `${detailPanelWidth}px`, minWidth: `${detailPanelWidth}px` }}
+                >
+                  {!detailPanelMaximized && (
+                    <button
+                      type="button"
+                      className="app-detail-collapse-btn"
+                      onClick={handleToggleDetailMinimize}
+                      title="Collapse detail panel (Cmd+D)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 18 15 12 9 6" />
+                      </svg>
+                    </button>
+                  )}
+                  <PodDetailPanel
+                    clusterFilename={activePodDetailTab.clusterFilename}
+                    mode={detailPanelMaximized ? 'modal' : 'split'}
+                    activeDetailsTab={activePodDetailPanelTab}
+                    onDetailsTabChange={handlePodDetailPanelTabChange}
+                    selectedPod={activePodDetailTab.pod}
+                    podDetail={podDetail}
+                    podDetailLoading={podDetailLoading}
+                    podDetailError={podDetailError}
+                    podLogs={podLogs}
+                    podLogsLoading={podLogsLoading}
+                    podLogsError={podLogsError}
+                    podLogsLoadingOlder={podLogsLoadingOlder}
+                    onLoadOlderLogs={loadOlderLogs}
+                    detailsMaximized={detailPanelMaximized}
+                    showMaximizeButton
+                    onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                    onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+                  />
+                </aside>
+              )}
             </>
           )}
-        </div>
 
-        {activePodDetailTab && detailPanelMaximized && (
-          <div className="app-pod-detail-modal-overlay" onClick={() => setDetailPanelMaximized(false)}>
-            <div className="app-pod-detail-modal" onClick={event => event.stopPropagation()}>
-              <PodDetailPanel
-                clusterFilename={activePodDetailTab.clusterFilename}
-                mode="modal"
-                activeDetailsTab={activePodDetailPanelTab}
-                onDetailsTabChange={handlePodDetailPanelTabChange}
-                selectedPod={activePodDetailTab.pod}
-                podDetail={podDetail}
-                podDetailLoading={podDetailLoading}
-                podDetailError={podDetailError}
-                podLogs={podLogs}
-                podLogsLoading={podLogsLoading}
-                podLogsError={podLogsError}
-                podLogsLoadingOlder={podLogsLoadingOlder}
-                onLoadOlderLogs={loadOlderLogs}
-                detailsMaximized={detailPanelMaximized}
-                showMaximizeButton
-                onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
-                onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
-              />
-            </div>
-          </div>
-        )}
+          {activePodDetailTab && detailPanelMaximized && (
+            <div className="app-pod-detail-inline-overlay" onClick={() => setDetailPanelMaximized(false)} />
+          )}
+        </div>
       </main>
 
       {showSettings && (
         <Modal title="Settings" onClose={() => setShowSettings(false)}>
-          <Settings onPathChanged={clusterTabs.loadClusters} embedded />
+          <Settings
+            onPathChanged={clusterTabs.loadClusters}
+            embedded
+            shortcuts={shortcuts}
+            onUpdateShortcut={updateShortcut}
+            onResetShortcuts={resetShortcuts}
+          />
         </Modal>
       )}
     </div>

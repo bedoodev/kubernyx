@@ -8,6 +8,7 @@ import type {
   PodResource,
   PodDetail,
   PodLogLine,
+  PodExecResult,
 } from '../types'
 
 export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
@@ -243,6 +244,15 @@ export function toPodDetail(data: unknown): PodDetail {
     status: String(record.status ?? ''),
     phase: String(record.phase ?? ''),
     age: String(record.age ?? '-'),
+    cpuUsage: String(record.cpuUsage ?? '-'),
+    memoryUsage: String(record.memoryUsage ?? '-'),
+    cpuUsageMilli: Number(record.cpuUsageMilli ?? 0),
+    memoryUsageBytes: Number(record.memoryUsageBytes ?? 0),
+    cpuRequestsMilli: Number(record.cpuRequestsMilli ?? 0),
+    cpuLimitsMilli: Number(record.cpuLimitsMilli ?? 0),
+    memoryRequestsBytes: Number(record.memoryRequestsBytes ?? 0),
+    memoryLimitsBytes: Number(record.memoryLimitsBytes ?? 0),
+    metricsAvailable: Boolean(record.metricsAvailable),
     podIP: String(record.podIP ?? '-'),
     node: String(record.node ?? '-'),
     qosClass: String(record.qosClass ?? '-'),
@@ -277,4 +287,15 @@ export function toPodLogLines(data: unknown): PodLogLine[] {
       message: String(record.message ?? ''),
     }
   })
+}
+
+export function toPodExecResult(data: unknown): PodExecResult {
+  const record = (data ?? {}) as Record<string, unknown>
+  return {
+    container: String(record.container ?? ''),
+    command: String(record.command ?? ''),
+    stdout: String(record.stdout ?? ''),
+    stderr: String(record.stderr ?? ''),
+    exitCode: Number(record.exitCode ?? 0),
+  }
 }

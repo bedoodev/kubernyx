@@ -1,43 +1,43 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #0f0f14;
-  --bg-secondary: #16161e;
-  --bg-tertiary: #1c1c27;
-  --bg-elevated: #22222f;
-  --bg-hover: #2a2a3a;
-  --border: #2a2a3a;
-  --border-subtle: #1f1f2e;
-  --text-primary: #e4e4ef;
-  --text-secondary: #8888a4;
-  --text-muted: #55556a;
-  --accent: #6c8cff;
-  --accent-dim: #4a62b8;
-  --accent-glow: rgba(108, 140, 255, 0.12);
-  --green: #4ade80;
-  --green-dim: rgba(74, 222, 128, 0.15);
-  --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.15);
-  --yellow: #fbbf24;
-  --yellow-dim: rgba(251, 191, 36, 0.15);
-  --cyan: #22d3ee;
-  --purple: #a78bfa;
-  --orange: #fb923c;
+  --bg-primary: #0c1220;
+  --bg-secondary: #141c2f;
+  --bg-tertiary: #1b2540;
+  --bg-elevated: #222f4f;
+  --bg-hover: #2a3b61;
+  --border: #304268;
+  --border-subtle: #263455;
+  --text-primary: #edf2ff;
+  --text-secondary: #b3bfdc;
+  --text-muted: #8f9dbc;
+  --accent: #7c9dff;
+  --accent-dim: #6282df;
+  --accent-glow: rgba(124, 157, 255, 0.2);
+  --green: #54e398;
+  --green-dim: rgba(84, 227, 152, 0.2);
+  --red: #ff868c;
+  --red-dim: rgba(255, 134, 140, 0.2);
+  --yellow: #ffd166;
+  --yellow-dim: rgba(255, 209, 102, 0.2);
+  --cyan: #48dcff;
+  --purple: #b79cff;
+  --orange: #ffad66;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
-  --chart-usage: #60a5fa;
-  --chart-requests: #14b8a6;
-  --chart-limits: #22d3ee;
-  --chart-allocatable: #3b82f6;
-  --chart-capacity: #334155;
-  --text-legend: #8ea3bd;
-  --text-legend-value: #9fb4cd;
-  --text-legend-title: #d8e2f0;
+  --chart-usage: #7db5ff;
+  --chart-requests: #32cfbf;
+  --chart-limits: #5adfff;
+  --chart-allocatable: #5e95ff;
+  --chart-capacity: #4c617f;
+  --text-legend: #a9bbd8;
+  --text-legend-value: #c3d1e8;
+  --text-legend-title: #edf2ff;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-md: 0 6px 16px rgba(0,0,0,0.46);
 }
 
 *, *::before, *::after {
@@ -54,10 +54,13 @@ html, body, #root {
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg-primary);
+  background:
+    radial-gradient(1000px 600px at 10% -10%, rgba(124, 157, 255, 0.14), transparent 65%),
+    radial-gradient(900px 500px at 90% -20%, rgba(72, 220, 255, 0.09), transparent 70%),
+    var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
@@ -72,12 +75,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: #3f547f;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: #5d77ad;
 }
 
 input, textarea, select, button {

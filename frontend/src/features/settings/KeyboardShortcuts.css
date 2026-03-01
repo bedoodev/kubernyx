@@ -1,0 +1,104 @@
+.keyboard-shortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.shortcuts-list {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.shortcut-row.recording {
+  background: var(--bg-hover);
+}
+
+.shortcut-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.shortcut-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 4px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.shortcut-key.recording {
+  border-color: var(--accent);
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.btn-shortcut {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-shortcut:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.shortcut-conflict {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--red);
+}
+
+.btn-reset-shortcuts {
+  align-self: flex-start;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-reset-shortcuts:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}

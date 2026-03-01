@@ -14,6 +14,10 @@ export function DeleteCluster(arg1) {
   return window['go']['main']['App']['DeleteCluster'](arg1);
 }
 
+export function ExecPodCommand(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ExecPodCommand'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function GetBasePath() {
   return window['go']['main']['App']['GetBasePath']();
 }

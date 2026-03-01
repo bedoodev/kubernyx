@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WORKLOAD_TAB_OPTIONS } from '../../shared/types'
 import type { ClusterInfo, ClusterSection, WorkloadTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
@@ -22,7 +22,13 @@ interface Props {
   onSettingsClick: () => void
 }
 
-export default function Sidebar({
+type NavItem =
+  | { type: 'cluster'; cluster: ClusterInfo }
+  | { type: 'overview'; cluster: ClusterInfo }
+  | { type: 'workloads-toggle'; cluster: ClusterInfo }
+  | { type: 'workload-tab'; cluster: ClusterInfo; tabId: WorkloadTabId }
+
+const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   clusters,
   width,
   activeCluster,
@@ -37,7 +43,7 @@ export default function Sidebar({
   onReadConfig,
   onUpdateConfig,
   onSettingsClick,
-}: Props) {
+}, ref) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingConfigCluster, setEditingConfigCluster] = useState<ClusterInfo | null>(null)
   const [clusterSearch, setClusterSearch] = useState('')
@@ -103,9 +109,94 @@ export default function Sidebar({
     ))
   }
 
+  const [focusedNavIndex, setFocusedNavIndex] = useState(-1)
+  const clusterListRef = useRef<HTMLDivElement | null>(null)
+
+  const navItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = []
+    for (const c of filteredClusters) {
+      items.push({ type: 'cluster', cluster: c })
+      if (expandedClusters.includes(c.filename)) {
+        items.push({ type: 'overview', cluster: c })
+        items.push({ type: 'workloads-toggle', cluster: c })
+        if (expandedWorkloads.includes(c.filename)) {
+          for (const tab of WORKLOAD_TAB_OPTIONS) {
+            items.push({ type: 'workload-tab', cluster: c, tabId: tab.id })
+          }
+        }
+      }
+    }
+    return items
+  }, [filteredClusters, expandedClusters, expandedWorkloads])
+
+  const handleClusterListKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement
+    if (target.tagName === 'INPUT') return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setFocusedNavIndex(current => Math.min(current + 1, navItems.length - 1))
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setFocusedNavIndex(current => Math.max(current - 1, 0))
+      return
+    }
+
+    if (focusedNavIndex < 0 || focusedNavIndex >= navItems.length) return
+    const item = navItems[focusedNavIndex]
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      if (item.type === 'cluster') {
+        toggleCluster(item.cluster.filename)
+      } else if (item.type === 'overview') {
+        onSelect(item.cluster, 'overview')
+      } else if (item.type === 'workloads-toggle') {
+        toggleWorkloads(item.cluster.filename)
+      } else if (item.type === 'workload-tab') {
+        onSelect(item.cluster, 'workloads', item.tabId)
+      }
+      return
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      if (item.type === 'cluster' && !expandedClusters.includes(item.cluster.filename)) {
+        toggleCluster(item.cluster.filename)
+      } else if (item.type === 'workloads-toggle' && !expandedWorkloads.includes(item.cluster.filename)) {
+        toggleWorkloads(item.cluster.filename)
+      }
+      return
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      if (item.type === 'cluster' && expandedClusters.includes(item.cluster.filename)) {
+        toggleCluster(item.cluster.filename)
+      } else if (item.type === 'workloads-toggle' && expandedWorkloads.includes(item.cluster.filename)) {
+        toggleWorkloads(item.cluster.filename)
+      } else if (item.type === 'overview' || item.type === 'workloads-toggle') {
+        const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      } else if (item.type === 'workload-tab') {
+        const parentIdx = navItems.findIndex(n => n.type === 'workloads-toggle' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      }
+      return
+    }
+  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, toggleCluster, toggleWorkloads, onSelect])
+
+  useEffect(() => {
+    if (focusedNavIndex < 0) return
+    const el = clusterListRef.current?.querySelector('[data-nav-focused="true"]') as HTMLElement | null
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [focusedNavIndex])
+
   return (
     <>
-      <aside className="sidebar" style={{ width, minWidth: width }} onClick={() => setContextMenu(null)}>
+      <aside className="sidebar" ref={ref} style={{ width, minWidth: width }} onClick={() => setContextMenu(null)}>
         <div className="sidebar-header">
           <div className="sidebar-title">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -145,91 +236,107 @@ export default function Sidebar({
           />
         </div>
 
-        <div className="cluster-list">
+        <div className="cluster-list" ref={clusterListRef} tabIndex={0} onKeyDown={handleClusterListKeyDown}>
           {filteredClusters.length === 0 ? (
             <div className="no-clusters">
               {clusters.length === 0 ? 'No clusters found' : 'No matching clusters'}
             </div>
           ) : (
-            filteredClusters.map(c => {
-              const expanded = expandedClusters.includes(c.filename)
-              const active = activeCluster?.filename === c.filename
-              const overviewActive = active && activeSection === 'overview'
-              const workloadsActive = active && activeSection === 'workloads'
-              const workloadsExpanded = expandedWorkloads.includes(c.filename)
+            (() => {
+              let navIdx = 0
+              return filteredClusters.map(c => {
+                const expanded = expandedClusters.includes(c.filename)
+                const active = activeCluster?.filename === c.filename
+                const overviewActive = active && activeSection === 'overview'
+                const workloadsActive = active && activeSection === 'workloads'
+                const workloadsExpanded = expandedWorkloads.includes(c.filename)
+                const clusterNavIdx = navIdx++
 
-              return (
-                <div
-                  key={c.filename}
-                  className={`cluster-item ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}`}
-                  onContextMenu={e => handleContextMenu(e, c)}
-                >
-                  <>
-                    <div className="cluster-main-row">
-                      <button
-                        type="button"
-                        className="cluster-toggle-btn"
-                        onClick={e => {
-                          e.stopPropagation()
-                          toggleCluster(c.filename)
-                        }}
-                        aria-expanded={expanded}
+                return (
+                  <div
+                    key={c.filename}
+                    className={`cluster-item ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}`}
+                    onContextMenu={e => handleContextMenu(e, c)}
+                  >
+                    <>
+                      <div
+                        className={`cluster-main-row ${focusedNavIndex === clusterNavIdx ? 'keyboard-focused' : ''}`}
+                        data-nav-focused={focusedNavIndex === clusterNavIdx || undefined}
                       >
-                        <svg className={`cluster-chevron ${expanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                          <path d="M7 5l6 5-6 5V5z" />
-                        </svg>
-                        <div className={`cluster-dot ${c.healthStatus ?? 'red'}`} />
-                        <span className="cluster-name">{c.name}</span>
-                      </button>
-                      <button
-                        className="cluster-menu-btn"
-                        onClick={e => { e.stopPropagation(); handleContextMenu(e, c) }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/>
-                        </svg>
-                      </button>
-                    </div>
-                    {expanded && (
-                      <>
                         <button
                           type="button"
-                          className={`cluster-sub-item ${overviewActive ? 'active' : ''}`}
+                          className="cluster-toggle-btn"
                           onClick={e => {
                             e.stopPropagation()
-                            onSelect(c, 'overview')
+                            toggleCluster(c.filename)
                           }}
+                          aria-expanded={expanded}
                         >
-                          <span>Overview</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`cluster-sub-item cluster-sub-toggle ${workloadsActive ? 'active' : ''}`}
-                          onClick={e => {
-                            e.stopPropagation()
-                            toggleWorkloads(c.filename)
-                          }}
-                        >
-                          <span>Workloads</span>
-                          <svg className={`cluster-sub-chevron ${workloadsExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <svg className={`cluster-chevron ${expanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                             <path d="M7 5l6 5-6 5V5z" />
                           </svg>
+                          <div className={`cluster-dot ${c.healthStatus ?? 'red'}`} />
+                          <span className="cluster-name">{c.name}</span>
                         </button>
-                        {workloadsExpanded && (
+                        <button
+                          className="cluster-menu-btn"
+                          onClick={e => { e.stopPropagation(); handleContextMenu(e, c) }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/>
+                          </svg>
+                        </button>
+                      </div>
+                      {expanded && (
+                        <>
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item ${overviewActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelect(c, 'overview')
+                              }}
+                            >
+                              <span>Overview</span>
+                            </button>
+                          )})()}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item cluster-sub-toggle ${workloadsActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                toggleWorkloads(c.filename)
+                              }}
+                            >
+                              <span>Workloads</span>
+                              <svg className={`cluster-sub-chevron ${workloadsExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path d="M7 5l6 5-6 5V5z" />
+                              </svg>
+                            </button>
+                          )})()}
+                          {workloadsExpanded && (
                           <div className="cluster-workloads-list">
-                            {WORKLOAD_TAB_OPTIONS.map(tab => (
-                              <button
-                                key={tab.id}
-                                type="button"
-                                className={`cluster-workload-item ${workloadsActive && activeWorkloadTab === tab.id ? 'active' : ''}`}
-                                onClick={e => {
-                                  e.stopPropagation()
-                                  onSelect(c, 'workloads', tab.id)
-                                }}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
+                            {WORKLOAD_TAB_OPTIONS.map(tab => {
+                              const idx = navIdx++
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  className={`cluster-workload-item ${workloadsActive && activeWorkloadTab === tab.id ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                                  data-nav-focused={focusedNavIndex === idx || undefined}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onSelect(c, 'workloads', tab.id)
+                                  }}
+                                >
+                                  {tab.label}
+                                </button>
+                              )
+                            })}
                           </div>
                         )}
                       </>
@@ -237,7 +344,7 @@ export default function Sidebar({
                   </>
                 </div>
               )
-            })
+            })})()
           )}
         </div>
 
@@ -285,4 +392,6 @@ export default function Sidebar({
       )}
     </>
   )
-}
+})
+
+export default Sidebar

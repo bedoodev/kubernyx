@@ -110,6 +110,24 @@ func (c *Client) GetPodDetail(ctx context.Context, namespace string, name string
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
 
+	cpuUsageMilli := int64(0)
+	memoryUsageBytes := int64(0)
+	cpuUsage := "-"
+	memoryUsage := "-"
+	metricsAvailable := false
+	if c.metrics != nil {
+		podMetrics, metricsErr := c.metrics.MetricsV1beta1().PodMetricses(namespace).Get(ctx, name, metav1.GetOptions{})
+		if metricsErr == nil {
+			metricsAvailable = true
+			for _, containerMetrics := range podMetrics.Containers {
+				cpuUsageMilli += containerMetrics.Usage.Cpu().MilliValue()
+				memoryUsageBytes += containerMetrics.Usage.Memory().Value()
+			}
+			cpuUsage = formatMilliCPU(cpuUsageMilli)
+			memoryUsage = formatBytes(memoryUsageBytes)
+		}
+	}
+
 	statusByName := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
 	for _, status := range pod.Status.ContainerStatuses {
 		statusByName[status.Name] = status
@@ -117,10 +135,26 @@ func (c *Client) GetPodDetail(ctx context.Context, namespace string, name string
 
 	containers := make([]PodDetailContainer, 0, len(pod.Spec.Containers))
 	var restartCount int64
+	var cpuRequestsMilli int64
+	var cpuLimitsMilli int64
+	var memoryRequestsBytes int64
+	var memoryLimitsBytes int64
 	for _, container := range pod.Spec.Containers {
 		status, ok := statusByName[container.Name]
 		detail := buildPodDetailContainer(container, status, ok)
 		restartCount += detail.Restarts
+		if quantity, ok := container.Resources.Requests[corev1.ResourceCPU]; ok {
+			cpuRequestsMilli += quantity.MilliValue()
+		}
+		if quantity, ok := container.Resources.Limits[corev1.ResourceCPU]; ok {
+			cpuLimitsMilli += quantity.MilliValue()
+		}
+		if quantity, ok := container.Resources.Requests[corev1.ResourceMemory]; ok {
+			memoryRequestsBytes += quantity.Value()
+		}
+		if quantity, ok := container.Resources.Limits[corev1.ResourceMemory]; ok {
+			memoryLimitsBytes += quantity.Value()
+		}
 		containers = append(containers, detail)
 	}
 
@@ -183,28 +217,37 @@ func (c *Client) GetPodDetail(ctx context.Context, namespace string, name string
 	}
 
 	return &PodDetail{
-		Name:            pod.Name,
-		Namespace:       pod.Namespace,
-		Status:          podStatusLabel(pod),
-		Phase:           stringOrDefault(string(pod.Status.Phase), "Unknown"),
-		Age:             formatAge(time.Since(pod.CreationTimestamp.Time)),
-		PodIP:           stringOrDefault(pod.Status.PodIP, "-"),
-		Node:            stringOrDefault(pod.Spec.NodeName, "-"),
-		QOSClass:        stringOrDefault(string(pod.Status.QOSClass), "-"),
-		RestartCount:    restartCount,
-		ControlledBy:    podControlledBy(pod),
-		Created:         pod.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
-		UID:             stringOrDefault(string(pod.UID), "-"),
-		ResourceVersion: stringOrDefault(pod.ResourceVersion, "-"),
-		Labels:          labels,
-		Annotations:     annotations,
-		OwnerReferences: ownerReferences,
-		Volumes:         volumes,
-		InitContainers:  initContainers,
-		Containers:      containers,
-		Conditions:      conditions,
-		Events:          events,
-		Manifest:        manifest,
+		Name:             pod.Name,
+		Namespace:        pod.Namespace,
+		Status:           podStatusLabel(pod),
+		Phase:            stringOrDefault(string(pod.Status.Phase), "Unknown"),
+		Age:              formatAge(time.Since(pod.CreationTimestamp.Time)),
+		CPUUsage:         cpuUsage,
+		MemoryUsage:      memoryUsage,
+		CPUUsageMilli:    cpuUsageMilli,
+		MemoryUsageBytes: memoryUsageBytes,
+		CPURequests:      cpuRequestsMilli,
+		CPULimits:        cpuLimitsMilli,
+		MemoryRequests:   memoryRequestsBytes,
+		MemoryLimits:     memoryLimitsBytes,
+		MetricsAvail:     metricsAvailable,
+		PodIP:            stringOrDefault(pod.Status.PodIP, "-"),
+		Node:             stringOrDefault(pod.Spec.NodeName, "-"),
+		QOSClass:         stringOrDefault(string(pod.Status.QOSClass), "-"),
+		RestartCount:     restartCount,
+		ControlledBy:     podControlledBy(pod),
+		Created:          pod.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
+		UID:              stringOrDefault(string(pod.UID), "-"),
+		ResourceVersion:  stringOrDefault(pod.ResourceVersion, "-"),
+		Labels:           labels,
+		Annotations:      annotations,
+		OwnerReferences:  ownerReferences,
+		Volumes:          volumes,
+		InitContainers:   initContainers,
+		Containers:       containers,
+		Conditions:       conditions,
+		Events:           events,
+		Manifest:         manifest,
 	}, nil
 }
 

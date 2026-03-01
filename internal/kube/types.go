@@ -147,28 +147,37 @@ type PodDetailVolume struct {
 }
 
 type PodDetail struct {
-	Name            string                    `json:"name"`
-	Namespace       string                    `json:"namespace"`
-	Status          string                    `json:"status"`
-	Phase           string                    `json:"phase"`
-	Age             string                    `json:"age"`
-	PodIP           string                    `json:"podIP"`
-	Node            string                    `json:"node"`
-	QOSClass        string                    `json:"qosClass"`
-	RestartCount    int64                     `json:"restartCount"`
-	ControlledBy    string                    `json:"controlledBy"`
-	Created         string                    `json:"created"`
-	UID             string                    `json:"uid"`
-	ResourceVersion string                    `json:"resourceVersion"`
-	Labels          map[string]string         `json:"labels"`
-	Annotations     map[string]string         `json:"annotations"`
-	OwnerReferences []PodDetailOwnerReference `json:"ownerReferences"`
-	Volumes         []PodDetailVolume         `json:"volumes"`
-	InitContainers  []PodDetailContainer      `json:"initContainers"`
-	Containers      []PodDetailContainer      `json:"containers"`
-	Conditions      []PodDetailCondition      `json:"conditions"`
-	Events          []PodDetailEvent          `json:"events"`
-	Manifest        string                    `json:"manifest"`
+	Name             string                    `json:"name"`
+	Namespace        string                    `json:"namespace"`
+	Status           string                    `json:"status"`
+	Phase            string                    `json:"phase"`
+	Age              string                    `json:"age"`
+	CPUUsage         string                    `json:"cpuUsage"`
+	MemoryUsage      string                    `json:"memoryUsage"`
+	CPUUsageMilli    int64                     `json:"cpuUsageMilli"`
+	MemoryUsageBytes int64                     `json:"memoryUsageBytes"`
+	CPURequests      int64                     `json:"cpuRequestsMilli"`
+	CPULimits        int64                     `json:"cpuLimitsMilli"`
+	MemoryRequests   int64                     `json:"memoryRequestsBytes"`
+	MemoryLimits     int64                     `json:"memoryLimitsBytes"`
+	MetricsAvail     bool                      `json:"metricsAvailable"`
+	PodIP            string                    `json:"podIP"`
+	Node             string                    `json:"node"`
+	QOSClass         string                    `json:"qosClass"`
+	RestartCount     int64                     `json:"restartCount"`
+	ControlledBy     string                    `json:"controlledBy"`
+	Created          string                    `json:"created"`
+	UID              string                    `json:"uid"`
+	ResourceVersion  string                    `json:"resourceVersion"`
+	Labels           map[string]string         `json:"labels"`
+	Annotations      map[string]string         `json:"annotations"`
+	OwnerReferences  []PodDetailOwnerReference `json:"ownerReferences"`
+	Volumes          []PodDetailVolume         `json:"volumes"`
+	InitContainers   []PodDetailContainer      `json:"initContainers"`
+	Containers       []PodDetailContainer      `json:"containers"`
+	Conditions       []PodDetailCondition      `json:"conditions"`
+	Events           []PodDetailEvent          `json:"events"`
+	Manifest         string                    `json:"manifest"`
 }
 
 type PodLogLine struct {
@@ -176,6 +185,14 @@ type PodLogLine struct {
 	CreatedAt     string `json:"createdAt"`
 	CreatedAtUnix int64  `json:"createdAtUnix"`
 	Message       string `json:"message"`
+}
+
+type PodExecResult struct {
+	Container string `json:"container"`
+	Command   string `json:"command"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	ExitCode  int    `json:"exitCode"`
 }
 
 const (

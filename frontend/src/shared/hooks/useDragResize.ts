@@ -12,11 +12,16 @@ interface UseDragResizeOptions {
   onUpdate: (nextWidth: number) => void
   /** If true, delta is subtracted from startWidth (for right-to-left resize). Default: false (left-to-right). */
   invertDelta?: boolean
+  /** Called when the user drags past the collapse threshold (below minWidth). */
+  onCollapseSnap?: () => void
+  /** Called when the user drags back above minWidth after having collapsed. */
+  onExpandSnap?: () => void
 }
 
-export function useDragResize({ onUpdate, invertDelta = false }: UseDragResizeOptions) {
+export function useDragResize({ onUpdate, invertDelta = false, onCollapseSnap, onExpandSnap }: UseDragResizeOptions) {
   const [isResizing, setIsResizing] = useState(false)
   const resizeStateRef = useRef<DragResizeState | null>(null)
+  const collapsedRef = useRef(false)
 
   const start = (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -27,6 +32,7 @@ export function useDragResize({ onUpdate, invertDelta = false }: UseDragResizeOp
     event.preventDefault()
     event.stopPropagation()
     resizeStateRef.current = { startX: event.clientX, startWidth, minWidth, maxWidth }
+    collapsedRef.current = false
     setIsResizing(true)
   }
 
@@ -47,12 +53,30 @@ export function useDragResize({ onUpdate, invertDelta = false }: UseDragResizeOp
       }
       const delta = event.clientX - state.startX
       const raw = invertDelta ? state.startWidth - delta : state.startWidth + delta
+
+      if (collapsedRef.current) {
+        if (onExpandSnap && raw >= state.minWidth) {
+          collapsedRef.current = false
+          onExpandSnap()
+          const nextWidth = Math.min(state.maxWidth, Math.max(state.minWidth, raw))
+          onUpdate(nextWidth)
+        }
+        return
+      }
+
+      if (onCollapseSnap && raw < state.minWidth - 60) {
+        collapsedRef.current = true
+        onCollapseSnap()
+        return
+      }
+
       const nextWidth = Math.min(state.maxWidth, Math.max(state.minWidth, raw))
       onUpdate(nextWidth)
     }
 
     const stopResize = () => {
       resizeStateRef.current = null
+      collapsedRef.current = false
       setIsResizing(false)
     }
 
@@ -64,7 +88,7 @@ export function useDragResize({ onUpdate, invertDelta = false }: UseDragResizeOp
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousUserSelect
     }
-  }, [isResizing, invertDelta, onUpdate])
+  }, [isResizing, invertDelta, onUpdate, onCollapseSnap, onExpandSnap])
 
   return { isResizing, start }
 }

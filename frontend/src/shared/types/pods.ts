@@ -74,6 +74,15 @@ export interface PodDetail {
   status: string;
   phase: string;
   age: string;
+  cpuUsage: string;
+  memoryUsage: string;
+  cpuUsageMilli: number;
+  memoryUsageBytes: number;
+  cpuRequestsMilli: number;
+  cpuLimitsMilli: number;
+  memoryRequestsBytes: number;
+  memoryLimitsBytes: number;
+  metricsAvailable: boolean;
   podIP: string;
   node: string;
   qosClass: string;
@@ -106,6 +115,14 @@ export interface PodLogLine {
   createdAt: string;
   createdAtUnix: number;
   message: string;
+}
+
+export interface PodExecResult {
+  container: string;
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
 }
 
 export interface PodsStreamEvent {

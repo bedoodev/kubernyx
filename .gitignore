@@ -33,6 +33,7 @@ go.work.sum
 
 # Wails build output
 build/bin/
+build/bin*
 
 # Frontend
 frontend/node_modules/

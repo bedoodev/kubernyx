@@ -170,7 +170,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 400;
   text-align: left;
 }
@@ -278,6 +278,25 @@
   background: var(--accent-glow);
   border-color: var(--accent-dim);
   color: var(--text-primary);
+}
+
+.cluster-main-row.keyboard-focused {
+  background: rgba(108, 140, 255, 0.08);
+  border-radius: 6px;
+}
+
+.cluster-main-row.keyboard-focused .cluster-toggle-btn {
+  color: var(--text-primary);
+}
+
+.cluster-sub-item.keyboard-focused,
+.cluster-workload-item.keyboard-focused {
+  background: rgba(108, 140, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.cluster-list:focus-visible {
+  outline: none;
 }
 
 .sidebar-footer {

@@ -98,8 +98,10 @@ export default function PodsTable({
   const [detailWidth, setDetailWidth] = useState(560)
   const [detailsMaximized, setDetailsMaximized] = useState(false)
   const [statusFilterOpen, setStatusFilterOpen] = useState(false)
+  const [focusedRowIndex, setFocusedRowIndex] = useState(-1)
 
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
+  const tableBodyRef = useRef<HTMLTableSectionElement | null>(null)
   const splitWrapRef = useRef<HTMLDivElement | null>(null)
   const statusFilterRef = useRef<HTMLDivElement | null>(null)
   const activeColumnKeyRef = useRef<PodColumnKey | null>(null)
@@ -326,6 +328,49 @@ export default function PodsTable({
     setDetailsMaximized(false)
   }
 
+  const handleTableKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (pagedItems.length === 0) return
+
+    const target = event.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setFocusedRowIndex(current => {
+        const next = current < pagedItems.length - 1 ? current + 1 : current
+        const row = tableBodyRef.current?.children[next] as HTMLElement | undefined
+        row?.scrollIntoView({ block: 'nearest' })
+        return next
+      })
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setFocusedRowIndex(current => {
+        const next = current > 0 ? current - 1 : 0
+        const row = tableBodyRef.current?.children[next] as HTMLElement | undefined
+        row?.scrollIntoView({ block: 'nearest' })
+        return next
+      })
+      return
+    }
+
+    if (event.key === 'Enter' && focusedRowIndex >= 0 && focusedRowIndex < pagedItems.length) {
+      event.preventDefault()
+      const pod = pagedItems[focusedRowIndex]
+      onPodActivate?.(pod, { pin: false })
+      if (showInlineDetails) {
+        openPodDetails(pod)
+      }
+      return
+    }
+  }, [pagedItems, focusedRowIndex, onPodActivate, showInlineDetails])
+
+  useEffect(() => {
+    setFocusedRowIndex(-1)
+  }, [page, search, statusFilter, sortKey, sortDir])
+
   return (
     <div className={`pods-table-root ${showInlineDetails && selectedPod ? 'with-details' : ''} ${(columnResize.isResizing || detailsResize.isResizing) ? 'resizing' : ''}`}>
       <div className={`pods-content ${showInlineDetails && selectedPod ? 'with-details' : ''}`} ref={splitWrapRef}>
@@ -375,7 +420,7 @@ export default function PodsTable({
             </div>
           </div>
 
-          <div className="pods-table-wrap" ref={tableWrapRef}>
+          <div className="pods-table-wrap" ref={tableWrapRef} tabIndex={0} onKeyDown={handleTableKeyDown}>
             <table className="pods-table" style={{ width: `${tableWidth}px`, minWidth: `${tableWidth}px` }}>
               <colgroup>
                 {POD_COLUMNS.map(column => (
@@ -426,7 +471,7 @@ export default function PodsTable({
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={tableBodyRef}>
                 {error ? (
                   <tr>
                     <td colSpan={POD_COLUMNS.length} className="pods-empty-row error">{error}</td>
@@ -440,11 +485,12 @@ export default function PodsTable({
                     <td colSpan={POD_COLUMNS.length} className="pods-empty-row">No pods found</td>
                   </tr>
                 ) : (
-                  pagedItems.map(item => {
+                  pagedItems.map((item, index) => {
                     const podKey = getPodKey(item)
                     const isSelected = visibleSelectedPodKey === podKey
+                    const isFocused = focusedRowIndex === index
                     return (
-                      <tr key={podKey} className={isSelected ? 'selected' : ''}>
+                      <tr key={podKey} className={`${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}>
                         <td className="pods-name-cell pods-cell" title={item.name}>
                           <button
                             type="button"
@@ -516,43 +562,21 @@ export default function PodsTable({
         </div>
 
         {showInlineDetails && selectedPod && !detailsMaximized && (
-          <>
-            <button
-              type="button"
-              className="pods-detail-split-resizer"
-              onMouseDown={handleDetailsResizeStart}
-              aria-label="Resize pod details panel"
-            />
-            <aside className="pods-detail-pane" style={{ width: `${detailWidth}px`, minWidth: `${detailWidth}px` }}>
-              <PodDetailPanel
-                clusterFilename={clusterFilename}
-                mode="split"
-                activeDetailsTab={activeDetailsTab}
-                onDetailsTabChange={setActiveDetailsTab}
-                selectedPod={selectedPod}
-                podDetail={podDetail}
-                podDetailLoading={podDetailLoading}
-                podDetailError={podDetailError}
-                podLogs={podLogs}
-                podLogsLoading={podLogsLoading}
-                podLogsError={podLogsError}
-                podLogsLoadingOlder={podLogsLoadingOlder}
-                onLoadOlderLogs={loadOlderLogs}
-                detailsMaximized={detailsMaximized}
-                onToggleMaximize={() => setDetailsMaximized(current => !current)}
-                onClose={closePodDetails}
-              />
-            </aside>
-          </>
+          <button
+            type="button"
+            className="pods-detail-split-resizer"
+            onMouseDown={handleDetailsResizeStart}
+            aria-label="Resize pod details panel"
+          />
         )}
-      </div>
-
-      {showInlineDetails && selectedPod && detailsMaximized && (
-        <div className="pods-detail-modal-overlay" onClick={() => setDetailsMaximized(false)}>
-          <div className="pods-detail-modal" onClick={event => event.stopPropagation()}>
+        {showInlineDetails && selectedPod && (
+          <aside
+            className={`pods-detail-pane ${detailsMaximized ? 'pods-detail-pane-maximized' : ''}`}
+            style={detailsMaximized ? undefined : { width: `${detailWidth}px`, minWidth: `${detailWidth}px` }}
+          >
             <PodDetailPanel
               clusterFilename={clusterFilename}
-              mode="modal"
+              mode={detailsMaximized ? 'modal' : 'split'}
               activeDetailsTab={activeDetailsTab}
               onDetailsTabChange={setActiveDetailsTab}
               selectedPod={selectedPod}
@@ -568,8 +592,12 @@ export default function PodsTable({
               onToggleMaximize={() => setDetailsMaximized(current => !current)}
               onClose={closePodDetails}
             />
-          </div>
-        </div>
+          </aside>
+        )}
+      </div>
+
+      {showInlineDetails && selectedPod && detailsMaximized && (
+        <div className="pods-detail-modal-overlay" onClick={() => setDetailsMaximized(false)} />
       )}
     </div>
   )
