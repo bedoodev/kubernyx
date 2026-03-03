@@ -107,7 +107,6 @@ export namespace kube {
 		    return a;
 		}
 	}
-	
 	export class PodDetailEvent {
 	    type: string;
 	    reason: string;
@@ -128,20 +127,48 @@ export namespace kube {
 	        this.age = source["age"];
 	    }
 	}
-	export class PodDetailCondition {
-	    type: string;
+	export class DeploymentDetailPod {
+	    name: string;
+	    node: string;
+	    namespace: string;
+	    ready: string;
+	    cpu: string;
+	    memory: string;
 	    status: string;
-	    message: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new PodDetailCondition(source);
+	        return new DeploymentDetailPod(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.node = source["node"];
+	        this.namespace = source["namespace"];
+	        this.ready = source["ready"];
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
 	        this.status = source["status"];
-	        this.message = source["message"];
+	    }
+	}
+	export class DeploymentDetailRevision {
+	    revision: string;
+	    replicaSet: string;
+	    replicas: number;
+	    ready: number;
+	    age: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeploymentDetailRevision(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.revision = source["revision"];
+	        this.replicaSet = source["replicaSet"];
+	        this.replicas = source["replicas"];
+	        this.ready = source["ready"];
+	        this.age = source["age"];
 	    }
 	}
 	export class PodDetailResourceValues {
@@ -262,6 +289,153 @@ export namespace kube {
 		    return a;
 		}
 	}
+	export class PodDetailCondition {
+	    type: string;
+	    status: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PodDetailCondition(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	    }
+	}
+	export class DeploymentDetail {
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    replicas: number;
+	    ready: number;
+	    updated: number;
+	    available: number;
+	    unavailable: number;
+	    age: string;
+	    created: string;
+	    uid: string;
+	    resourceVersion: string;
+	    labels: Record<string, string>;
+	    annotations: Record<string, string>;
+	    selector: Record<string, string>;
+	    strategyType: string;
+	    conditions: PodDetailCondition[];
+	    tolerations: string[];
+	    nodeAffinities: string[];
+	    podAntiAffinities: string[];
+	    containers: PodDetailContainer[];
+	    revisions: DeploymentDetailRevision[];
+	    pods: DeploymentDetailPod[];
+	    events: PodDetailEvent[];
+	    manifest: string;
+	    scaleSupported: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeploymentDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.replicas = source["replicas"];
+	        this.ready = source["ready"];
+	        this.updated = source["updated"];
+	        this.available = source["available"];
+	        this.unavailable = source["unavailable"];
+	        this.age = source["age"];
+	        this.created = source["created"];
+	        this.uid = source["uid"];
+	        this.resourceVersion = source["resourceVersion"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.selector = source["selector"];
+	        this.strategyType = source["strategyType"];
+	        this.conditions = this.convertValues(source["conditions"], PodDetailCondition);
+	        this.tolerations = source["tolerations"];
+	        this.nodeAffinities = source["nodeAffinities"];
+	        this.podAntiAffinities = source["podAntiAffinities"];
+	        this.containers = this.convertValues(source["containers"], PodDetailContainer);
+	        this.revisions = this.convertValues(source["revisions"], DeploymentDetailRevision);
+	        this.pods = this.convertValues(source["pods"], DeploymentDetailPod);
+	        this.events = this.convertValues(source["events"], PodDetailEvent);
+	        this.manifest = source["manifest"];
+	        this.scaleSupported = source["scaleSupported"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class DeploymentLogLine {
+	    podName: string;
+	    container: string;
+	    createdAt: string;
+	    createdAtUnix: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeploymentLogLine(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.podName = source["podName"];
+	        this.container = source["container"];
+	        this.createdAt = source["createdAt"];
+	        this.createdAtUnix = source["createdAtUnix"];
+	        this.message = source["message"];
+	    }
+	}
+	export class DeploymentResource {
+	    name: string;
+	    namespace: string;
+	    pods: string;
+	    replicas: number;
+	    status: string;
+	    createdAtUnix: number;
+	    age: string;
+	    labels: Record<string, string>;
+	    annotations: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeploymentResource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.pods = source["pods"];
+	        this.replicas = source["replicas"];
+	        this.status = source["status"];
+	        this.createdAtUnix = source["createdAtUnix"];
+	        this.age = source["age"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	    }
+	}
+	
 	export class PodDetailVolume {
 	    name: string;
 	    type: string;

@@ -32,7 +32,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   padding: 0 10px;
   user-select: none;
 }
@@ -81,6 +81,79 @@
   font-size: 10px;
   letter-spacing: 0.8px;
   text-transform: uppercase;
+}
+
+.yaml-editor-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.yaml-editor-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 1px solid rgba(119, 146, 206, 0.3);
+  border-radius: 6px;
+  background: rgba(10, 16, 32, 0.55);
+  padding: 0 6px;
+  height: 24px;
+}
+
+.yaml-editor-search:focus-within {
+  border-color: rgba(129, 157, 225, 0.75);
+  box-shadow: 0 0 0 2px rgba(88, 122, 206, 0.2);
+}
+
+.yaml-editor-search-input {
+  width: 170px;
+  max-width: 28vw;
+  min-width: 88px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #d3e4ff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.yaml-editor-search-input::placeholder {
+  color: #7f93bd;
+}
+
+.yaml-editor-search-count {
+  color: #8ca1cc;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .yaml-editor-toolbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .yaml-editor-toolbar-right {
+    gap: 6px;
+  }
+
+  .yaml-editor-search {
+    height: 22px;
+    padding: 0 5px;
+  }
+
+  .yaml-editor-search-input {
+    width: 120px;
+  }
+
+  .yaml-editor-badge {
+    font-size: 9px;
+  }
 }
 
 /* ─── Main Editor Area ─── */

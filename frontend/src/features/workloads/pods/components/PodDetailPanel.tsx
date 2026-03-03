@@ -268,6 +268,7 @@ export default function PodDetailPanel({
   const [logsFilterOpen, setLogsFilterOpen] = useState(false)
   const [logsLevelFilter, setLogsLevelFilter] = useState<LogLevelFilter>('all')
   const [logsLevelFilterOpen, setLogsLevelFilterOpen] = useState(false)
+  const [logsSearchQuery, setLogsSearchQuery] = useState('')
   const [logsShowTimestamp, setLogsShowTimestamp] = useState(false)
   const [logsPaused, setLogsPaused] = useState(false)
   const [logsPausedSnapshot, setLogsPausedSnapshot] = useState<PodLogLine[] | null>(null)
@@ -284,6 +285,7 @@ export default function PodDetailPanel({
   const containerSelectRef = useRef<HTMLDivElement | null>(null)
   const logsFilterRef = useRef<HTMLDivElement | null>(null)
   const logsLevelFilterRef = useRef<HTMLDivElement | null>(null)
+  const logsSearchInputRef = useRef<HTMLInputElement | null>(null)
   const shell = shellSessions[shellContainerName] ?? EMPTY_SHELL_SESSION
   const terminalUnavailable = shell.unavailable || isTerminalUnavailableError(shell.error ?? '')
   const shellInputDisabled = shell.running || shell.tabCompleting || terminalUnavailable
@@ -405,6 +407,7 @@ export default function PodDetailPanel({
     setLogsFilterOpen(false)
     setLogsLevelFilter('all')
     setLogsLevelFilterOpen(false)
+    setLogsSearchQuery('')
     setLogsShowTimestamp(false)
     setLogsPaused(false)
     setLogsPausedSnapshot(null)
@@ -489,8 +492,18 @@ export default function PodDetailPanel({
       ? logsAfterClear
       : logsAfterClear.filter(item => item.container === logsContainerFilter)
 
-    return byContainer.filter(item => matchesLogLevel(item.message, logsLevelFilter))
-  }, [logsAfterClear, logsContainerFilter, logsLevelFilter])
+    const byLevel = byContainer.filter(item => matchesLogLevel(item.message, logsLevelFilter))
+    const needle = logsSearchQuery.trim().toLowerCase()
+    if (!needle) {
+      return byLevel
+    }
+
+    return byLevel.filter(item => (
+      item.message.toLowerCase().includes(needle)
+      || item.container.toLowerCase().includes(needle)
+      || item.createdAt.toLowerCase().includes(needle)
+    ))
+  }, [logsAfterClear, logsContainerFilter, logsLevelFilter, logsSearchQuery])
 
   const scrollLogsToBottom = (behavior: ScrollBehavior = 'auto') => {
     const el = logsViewRef.current
@@ -631,6 +644,19 @@ export default function PodDetailPanel({
       }
     }
   }, [activeDetailsTab, shell.user, shellContainerName, clusterFilename, selectedPod.namespace, selectedPod.name])
+
+  useEffect(() => {
+    const handleFindShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f' && activeDetailsTab === 'logs') {
+        event.preventDefault()
+        logsSearchInputRef.current?.focus()
+        logsSearchInputRef.current?.select()
+      }
+    }
+
+    window.addEventListener('keydown', handleFindShortcut)
+    return () => window.removeEventListener('keydown', handleFindShortcut)
+  }, [activeDetailsTab])
 
   const fetchInitContainerLogs = (key: string, containerName: string) => {
     setInitLogsLoadingByKey(current => ({ ...current, [key]: true }))
@@ -1308,6 +1334,18 @@ export default function PodDetailPanel({
             </div>
           </div>
 
+          <div className="pods-logs-search">
+            <input
+              ref={logsSearchInputRef}
+              type="search"
+              className="pods-logs-search-input"
+              value={logsSearchQuery}
+              onChange={event => setLogsSearchQuery(event.target.value)}
+              placeholder="Search logs..."
+              aria-label="Search logs"
+            />
+          </div>
+
           <label className="pods-logs-toggle">
             <input
               type="checkbox"
@@ -1639,6 +1677,11 @@ export default function PodDetailPanel({
         <div className="pods-shell-terminal">
           <div className="pods-shell-header">
             <div className="pods-shell-header-left">
+              <div className="pods-shell-traffic-lights" aria-hidden="true">
+                <span className="pods-shell-dot red" />
+                <span className="pods-shell-dot yellow" />
+                <span className="pods-shell-dot green" />
+              </div>
               <div className={`pods-container-select-wrap ${shellContainerOpen ? 'open' : ''}`} ref={shellContainerRef}>
                 <button
                   type="button"
@@ -1684,14 +1727,15 @@ export default function PodDetailPanel({
                 )}
               </div>
             </div>
-            <div className="pods-shell-header-right">
-              {terminalUnavailable && (
-                <span className="pods-shell-unavailable-info">
-                  {shell.error || 'Terminal unavailable'}
-                </span>
-              )}
-            </div>
           </div>
+
+          {terminalUnavailable && (
+            <div className="pods-shell-unavailable-bar">
+              <span className="pods-shell-unavailable-info">
+                {shell.error || 'Terminal unavailable'}
+              </span>
+            </div>
+          )}
 
           <div
             className="pods-shell-body"
@@ -1703,6 +1747,12 @@ export default function PodDetailPanel({
               shellInputRef.current?.focus()
             }}
           >
+            {shell.entries.length === 0 && !terminalUnavailable && !shell.error && (
+              <div className="pods-shell-welcome">
+                <span className="pods-shell-welcome-prompt">$_ </span>
+                Connected to <strong>{shellContainerName}</strong> in pod <strong>{selectedPod.name}</strong>
+              </div>
+            )}
             {shell.error && !terminalUnavailable && (
               <div className="pods-shell-error-line">{shell.error}</div>
             )}
@@ -1903,7 +1953,7 @@ export default function PodDetailPanel({
         ))}
       </nav>
 
-      <div className={`pods-detail-body ${activeDetailsTab === 'manifest' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : ''}`}>
+      <div className={`pods-detail-body ${activeDetailsTab === 'manifest' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : activeDetailsTab === 'shell' ? 'shell-mode' : ''}`}>
         {(!['overview', 'metadata', 'init-containers', 'containers', 'logs', 'shell', 'usages', 'manifest'].includes(activeDetailsTab)) ? (
           <>
             <h5>{detailTabLabel}</h5>

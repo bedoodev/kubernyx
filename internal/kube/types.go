@@ -64,19 +64,88 @@ type WorkloadCounts struct {
 }
 
 type PodResource struct {
-	Name          string `json:"name"`
-	Namespace     string `json:"namespace"`
-	CPU           string `json:"cpu"`
-	Memory        string `json:"memory"`
-	ControlledBy  string `json:"controlledBy"`
-	Status        string `json:"status"`
-	CreatedAtUnix int64  `json:"createdAtUnix"`
-	Age           string `json:"age"`
+	Name          string            `json:"name"`
+	Namespace     string            `json:"namespace"`
+	CPU           string            `json:"cpu"`
+	Memory        string            `json:"memory"`
+	ControlledBy  string            `json:"controlledBy"`
+	Status        string            `json:"status"`
+	CreatedAtUnix int64             `json:"createdAtUnix"`
+	Age           string            `json:"age"`
+	Labels        map[string]string `json:"labels"`
+	Annotations   map[string]string `json:"annotations"`
+}
+
+type DeploymentResource struct {
+	Name          string            `json:"name"`
+	Namespace     string            `json:"namespace"`
+	Pods          string            `json:"pods"`
+	Replicas      int32             `json:"replicas"`
+	Status        string            `json:"status"`
+	CreatedAtUnix int64             `json:"createdAtUnix"`
+	Age           string            `json:"age"`
+	Labels        map[string]string `json:"labels"`
+	Annotations   map[string]string `json:"annotations"`
 }
 
 type PodResourceSnapshot struct {
 	Items            []PodResource `json:"items"`
 	MetricsAvailable bool          `json:"metricsAvailable"`
+}
+
+type DeploymentDetailRevision struct {
+	Revision   string `json:"revision"`
+	ReplicaSet string `json:"replicaSet"`
+	Replicas   int32  `json:"replicas"`
+	Ready      int32  `json:"ready"`
+	Age        string `json:"age"`
+}
+
+type DeploymentDetailPod struct {
+	Name      string `json:"name"`
+	Node      string `json:"node"`
+	Namespace string `json:"namespace"`
+	Ready     string `json:"ready"`
+	CPU       string `json:"cpu"`
+	Memory    string `json:"memory"`
+	Status    string `json:"status"`
+}
+
+type DeploymentDetail struct {
+	Name            string                     `json:"name"`
+	Namespace       string                     `json:"namespace"`
+	Status          string                     `json:"status"`
+	Replicas        int32                      `json:"replicas"`
+	Ready           int32                      `json:"ready"`
+	Updated         int32                      `json:"updated"`
+	Available       int32                      `json:"available"`
+	Unavailable     int32                      `json:"unavailable"`
+	Age             string                     `json:"age"`
+	Created         string                     `json:"created"`
+	UID             string                     `json:"uid"`
+	ResourceVersion string                     `json:"resourceVersion"`
+	Labels          map[string]string          `json:"labels"`
+	Annotations     map[string]string          `json:"annotations"`
+	Selector        map[string]string          `json:"selector"`
+	StrategyType    string                     `json:"strategyType"`
+	Conditions      []PodDetailCondition       `json:"conditions"`
+	Tolerations     []string                   `json:"tolerations"`
+	NodeAffinities  []string                   `json:"nodeAffinities"`
+	PodAntiAffinity []string                   `json:"podAntiAffinities"`
+	Containers      []PodDetailContainer       `json:"containers"`
+	Revisions       []DeploymentDetailRevision `json:"revisions"`
+	Pods            []DeploymentDetailPod      `json:"pods"`
+	Events          []PodDetailEvent           `json:"events"`
+	Manifest        string                     `json:"manifest"`
+	ScaleSupported  bool                       `json:"scaleSupported"`
+}
+
+type DeploymentLogLine struct {
+	PodName       string `json:"podName"`
+	Container     string `json:"container"`
+	CreatedAt     string `json:"createdAt"`
+	CreatedAtUnix int64  `json:"createdAtUnix"`
+	Message       string `json:"message"`
 }
 
 type PodDetailContainer struct {

@@ -15,9 +15,21 @@ export function GetBasePath():Promise<string>;
 
 export function GetClusterConfig(arg1:string):Promise<string>;
 
+export function GetDeploymentDetails(arg1:string,arg2:string,arg3:string):Promise<kube.DeploymentDetail>;
+
+export function GetDeploymentLogs(arg1:string,arg2:string,arg3:string,arg4:number):Promise<Array<kube.DeploymentLogLine>>;
+
+export function GetDeploymentResources(arg1:string,arg2:Array<string>):Promise<Array<kube.DeploymentResource>>;
+
 export function GetPodDetails(arg1:string,arg2:string,arg3:string):Promise<kube.PodDetail>;
 
 export function GetPodLogs(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<kube.PodLogLine>>;
+
+export function GetWorkloadDetails(arg1:string,arg2:string,arg3:string,arg4:string):Promise<kube.DeploymentDetail>;
+
+export function GetWorkloadLogs(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<Array<kube.DeploymentLogLine>>;
+
+export function GetWorkloadResources(arg1:string,arg2:string,arg3:Array<string>):Promise<Array<kube.DeploymentResource>>;
 
 export function GetWorkloads(arg1:Array<string>):Promise<kube.WorkloadCounts>;
 
@@ -28,6 +40,10 @@ export function RefreshOverview(arg1:string):Promise<kube.ClusterOverview>;
 export function RenameCluster(arg1:string,arg2:string):Promise<string>;
 
 export function SavePodLogsFile(arg1:string,arg2:string):Promise<string>;
+
+export function ScaleDeployment(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
+
+export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
 
 export function SelectDirectory():Promise<string>;
 
@@ -42,3 +58,7 @@ export function StopPodLogsStream():Promise<void>;
 export function StopPodsStream():Promise<void>;
 
 export function UpdateClusterConfig(arg1:string,arg2:string):Promise<void>;
+
+export function UpdateDeploymentManifest(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function UpdateWorkloadManifest(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;

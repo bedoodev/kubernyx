@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import './YamlEditor.css'
 
 interface Props {
@@ -8,6 +8,27 @@ interface Props {
   minHeight?: number
   title?: string
   className?: string
+}
+
+function findSearchIndexes(value: string, query: string): number[] {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) {
+    return []
+  }
+
+  const haystack = value.toLowerCase()
+  const hits: number[] = []
+  let cursor = 0
+  while (cursor < haystack.length) {
+    const index = haystack.indexOf(trimmed, cursor)
+    if (index === -1) {
+      break
+    }
+    hits.push(index)
+    cursor = index + Math.max(trimmed.length, 1)
+  }
+
+  return hits
 }
 
 function escapeHtml(value: string): string {
@@ -103,10 +124,20 @@ const YamlEditor = memo(function YamlEditor({
 }: Props) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const highlightRef = useRef<HTMLPreElement | null>(null)
+  const rootRef = useRef<HTMLElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const rafRef = useRef<number | null>(null)
+  const [searchValue, setSearchValue] = useState('')
+  const [searchMatchIndex, setSearchMatchIndex] = useState(0)
+  const [hasFocusedMatch, setHasFocusedMatch] = useState(false)
   const isReadOnly = readOnly || !onChange
+  const searchQuery = searchValue.trim()
 
   const highlighted = useMemo(() => highlightYaml(value), [value])
+  const searchMatches = useMemo(
+    () => findSearchIndexes(value, searchQuery),
+    [value, searchQuery],
+  )
 
   const syncScrollNow = () => {
     const input = inputRef.current
@@ -135,6 +166,65 @@ const YamlEditor = memo(function YamlEditor({
     scheduleSyncScroll()
   }, [value])
 
+  const focusSearchMatch = (index: number) => {
+    if (!searchQuery || searchMatches.length === 0) {
+      return
+    }
+    const input = inputRef.current
+    if (!input) {
+      return
+    }
+    const start = searchMatches[index]
+    if (typeof start !== 'number') {
+      return
+    }
+    const end = start + searchQuery.length
+    input.focus()
+    input.setSelectionRange(start, end)
+    scheduleSyncScroll()
+  }
+
+  useEffect(() => {
+    setSearchMatchIndex(0)
+    setHasFocusedMatch(false)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (searchMatches.length === 0) {
+      setHasFocusedMatch(false)
+      if (searchMatchIndex !== 0) {
+        setSearchMatchIndex(0)
+      }
+      return
+    }
+    if (searchMatchIndex > searchMatches.length - 1) {
+      setSearchMatchIndex(searchMatches.length - 1)
+    }
+  }, [searchMatchIndex, searchMatches])
+
+  useEffect(() => {
+    const handleFindShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        const root = rootRef.current
+        if (!root) {
+          return
+        }
+
+        const style = window.getComputedStyle(root)
+        if (style.display === 'none' || style.visibility === 'hidden') {
+          return
+        }
+
+        event.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      }
+    }
+
+    window.addEventListener('keydown', handleFindShortcut)
+    return () => window.removeEventListener('keydown', handleFindShortcut)
+  }, [])
+
   useEffect(() => () => {
     if (rafRef.current !== null) {
       window.cancelAnimationFrame(rafRef.current)
@@ -142,8 +232,28 @@ const YamlEditor = memo(function YamlEditor({
     }
   }, [])
 
+  const stepToNextMatch = (direction: 1 | -1) => {
+    if (searchMatches.length === 0) {
+      return
+    }
+    const nextIndex = hasFocusedMatch
+      ? (searchMatchIndex + direction + searchMatches.length) % searchMatches.length
+      : direction === 1
+        ? 0
+        : searchMatches.length - 1
+    setSearchMatchIndex(nextIndex)
+    setHasFocusedMatch(true)
+    focusSearchMatch(nextIndex)
+  }
+
+  const searchCounterLabel = searchQuery.length === 0
+    ? ''
+    : searchMatches.length === 0
+      ? '0/0'
+      : `${hasFocusedMatch ? Math.min(searchMatchIndex + 1, searchMatches.length) : 0}/${searchMatches.length}`
+
   return (
-    <section className={`yaml-editor ${className ?? ''} ${isReadOnly ? 'is-readonly' : ''}`}>
+    <section ref={rootRef} className={`yaml-editor ${className ?? ''} ${isReadOnly ? 'is-readonly' : ''}`}>
       <header className="yaml-editor-toolbar">
         <div className="yaml-editor-toolbar-left">
           <span className="yaml-editor-dot red" />
@@ -151,7 +261,35 @@ const YamlEditor = memo(function YamlEditor({
           <span className="yaml-editor-dot green" />
           <span className="yaml-editor-title">{title}</span>
         </div>
-        <span className="yaml-editor-badge">{isReadOnly ? 'READ ONLY' : 'EDITABLE'}</span>
+        <div className="yaml-editor-toolbar-right">
+          <div className="yaml-editor-search">
+            <input
+              ref={searchInputRef}
+              type="search"
+              className="yaml-editor-search-input"
+              value={searchValue}
+              onChange={event => setSearchValue(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  stepToNextMatch(event.shiftKey ? -1 : 1)
+                  return
+                }
+                if (event.key === 'Escape' && searchValue.length > 0) {
+                  event.preventDefault()
+                  setSearchValue('')
+                  setHasFocusedMatch(false)
+                }
+              }}
+              placeholder="Search..."
+              aria-label="Search YAML"
+            />
+            {searchCounterLabel && (
+              <span className="yaml-editor-search-count">{searchCounterLabel}</span>
+            )}
+          </div>
+          <span className="yaml-editor-badge">{isReadOnly ? 'READ ONLY' : 'EDITABLE'}</span>
+        </div>
       </header>
 
       <div className="yaml-editor-main" style={{ minHeight: `${minHeight}px` }}>

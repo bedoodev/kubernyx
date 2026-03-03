@@ -849,6 +849,12 @@
   overflow: hidden;
 }
 
+.pods-detail-body.shell-mode {
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+
 .pods-detail-body h5 {
   font-family: var(--detail-title-family);
   font-size: var(--detail-title-size);
@@ -1777,6 +1783,36 @@
   accent-color: var(--text-muted);
 }
 
+.pods-logs-search {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 190px;
+  min-width: 120px;
+}
+
+.pods-logs-search-input {
+  width: 100%;
+  min-height: 24px;
+  border: 1px solid rgba(140, 160, 200, 0.12);
+  border-radius: 4px;
+  background: rgba(10, 14, 26, 0.4);
+  color: var(--text-primary);
+  padding: 0 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.pods-logs-search-input::placeholder {
+  color: rgba(140, 160, 200, 0.6);
+}
+
+.pods-logs-search-input:focus {
+  outline: none;
+  border-color: rgba(108, 140, 255, 0.55);
+  box-shadow: 0 0 0 2px rgba(108, 140, 255, 0.12);
+}
+
 .pods-logs-actions {
   display: inline-flex;
   align-items: center;
@@ -1965,8 +2001,6 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
   overflow: hidden;
   background: #0a0e1a;
 }
@@ -1974,13 +2008,12 @@
 .pods-shell-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 10px;
-  min-height: 36px;
-  background: rgba(16, 22, 38, 0.95);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 12px;
+  min-height: 38px;
+  flex-shrink: 0;
+  background: #0d1120;
+  border-bottom: 1px solid rgba(100, 120, 170, 0.12);
 }
 
 .pods-shell-header-left {
@@ -1990,6 +2023,23 @@
   flex: 0 1 auto;
   min-width: 0;
 }
+
+.pods-shell-traffic-lights {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.pods-shell-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.pods-shell-dot.red { background: #ff5f57; }
+.pods-shell-dot.yellow { background: #febc2e; }
+.pods-shell-dot.green { background: #28c840; }
 
 .pods-shell-header-left .pods-container-select-wrap {
   flex: 0 1 auto;
@@ -2003,50 +2053,22 @@
   background: rgba(10, 14, 26, 0.5);
 }
 
-.pods-shell-header-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+.pods-shell-unavailable-bar {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: rgba(196, 138, 142, 0.05);
+  border-bottom: 1px solid rgba(196, 138, 142, 0.12);
 }
 
 .pods-shell-unavailable-info {
   color: #c48a8e;
-  background: rgba(196, 138, 142, 0.08);
-  border: 1px solid rgba(196, 138, 142, 0.2);
-  border-radius: 4px;
-  padding: 2px 8px;
   font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.35;
-  max-width: min(560px, 100%);
-  white-space: normal;
+  font-size: 10.5px;
+  line-height: 1.45;
+  display: block;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-.pods-shell-clear-btn {
-  border: 1px solid rgba(140, 160, 200, 0.12);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 2px 7px;
-  cursor: pointer;
-  margin-left: 4px;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.pods-shell-clear-btn:hover:not(:disabled) {
-  background: rgba(140, 160, 200, 0.06);
-  color: var(--text-secondary);
-  border-color: rgba(140, 160, 200, 0.2);
-}
-
-.pods-shell-clear-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 .pods-shell-body {
@@ -2063,12 +2085,24 @@
 }
 
 .pods-shell-welcome {
-  color: rgba(140, 160, 200, 0.5);
+  color: rgba(180, 210, 200, 0.65);
   font-size: 11px;
+  line-height: 1.6;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(84, 227, 152, 0.1);
+  border-radius: 6px;
+  background: rgba(84, 227, 152, 0.04);
+}
+
+.pods-shell-welcome strong {
+  color: rgba(200, 220, 240, 0.85);
+  font-weight: 600;
 }
 
 .pods-shell-welcome-prompt {
-  color: var(--text-muted);
+  color: #54e398;
+  font-weight: 600;
 }
 
 .pods-shell-error-line {
@@ -2093,20 +2127,20 @@
 }
 
 .pods-shell-prompt-container {
-  color: var(--text-secondary);
+  color: #54e398;
   font-weight: 500;
 }
 
 .pods-shell-prompt-sep {
-  color: rgba(140, 160, 200, 0.35);
+  color: rgba(140, 160, 200, 0.4);
 }
 
 .pods-shell-prompt-cwd {
-  color: var(--text-muted);
+  color: #48dcff;
 }
 
 .pods-shell-prompt-dollar {
-  color: var(--text-muted);
+  color: rgba(230, 238, 255, 0.85);
   font-weight: 500;
 }
 
@@ -2120,7 +2154,7 @@
 .pods-shell-stdout {
   margin: 0;
   padding: 0;
-  color: rgba(200, 210, 230, 0.8);
+  color: rgba(215, 225, 245, 0.92);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -2156,7 +2190,7 @@
   display: inline-block;
   width: 7px;
   height: 14px;
-  background: var(--text-muted);
+  background: #54e398;
   animation: pods-shell-blink 1s step-end infinite;
 }
 
@@ -2173,7 +2207,7 @@
 .pods-shell-input-line.disabled .pods-shell-prompt-cwd,
 .pods-shell-input-line.disabled .pods-shell-prompt-dollar,
 .pods-shell-input-line.disabled .pods-shell-prompt-sep {
-  color: rgba(140, 160, 200, 0.25);
+  opacity: 0.25;
 }
 
 .pods-shell-inline-input {
@@ -2191,6 +2225,40 @@
 
 .pods-shell-inline-input:disabled {
   opacity: 0.4;
+}
+
+.deployment-yaml-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.deployment-scale-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.deployment-scale-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deployment-scale-form input {
+  width: 160px;
+  min-height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--detail-value-color);
+  padding: 0 10px;
+  font-size: var(--detail-value-size);
+}
+
+.deployment-scale-form input:focus {
+  outline: none;
+  border-color: rgba(108, 140, 255, 0.45);
 }
 
 /* ─── Usages Tab ─── */

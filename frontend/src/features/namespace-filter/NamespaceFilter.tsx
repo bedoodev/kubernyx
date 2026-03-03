@@ -6,9 +6,16 @@ interface Props {
   selected: string[]
   onChange: (ns: string[]) => void
   className?: string
+  emptyMeansAll?: boolean
 }
 
-export default function NamespaceFilter({ namespaces, selected, onChange, className }: Props) {
+export default function NamespaceFilter({
+  namespaces,
+  selected,
+  onChange,
+  className,
+  emptyMeansAll = true,
+}: Props) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -30,6 +37,10 @@ export default function NamespaceFilter({ namespaces, selected, onChange, classN
   }, [namespaces, search])
 
   const toggle = (ns: string) => {
+    if (emptyMeansAll && selected.length === 0) {
+      onChange(namespaces.filter(item => item !== ns))
+      return
+    }
     if (selected.includes(ns)) {
       onChange(selected.filter(s => s !== ns))
     } else {
@@ -37,9 +48,15 @@ export default function NamespaceFilter({ namespaces, selected, onChange, classN
     }
   }
 
-  const allSelected = selected.length === 0
+  const allExplicitlySelected = namespaces.length > 0 && namespaces.every(ns => selected.includes(ns))
+  const allSelected = emptyMeansAll
+    ? selected.length === 0 || allExplicitlySelected
+    : allExplicitlySelected
+
   const label = allSelected
     ? 'All namespaces'
+    : selected.length === 0
+      ? 'Select namespaces'
     : selected.length === 1
       ? selected[0]
       : `${selected.length} namespaces`
@@ -73,7 +90,17 @@ export default function NamespaceFilter({ namespaces, selected, onChange, classN
               />
               <div className="ns-options">
                 <label className="ns-option">
-                  <input type="checkbox" checked={allSelected} onChange={() => onChange([])} />
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={() => {
+                      if (emptyMeansAll) {
+                        onChange([])
+                        return
+                      }
+                      onChange(allSelected ? [] : [...namespaces])
+                    }}
+                  />
                   <span>All namespaces</span>
                 </label>
                 {filtered.map(ns => (

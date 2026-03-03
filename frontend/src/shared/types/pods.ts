@@ -7,6 +7,8 @@ export interface PodResource {
   status: string;
   createdAtUnix?: number;
   age?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface PodDetailContainer {

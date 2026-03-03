@@ -72,6 +72,15 @@ func (c *Client) GetPodResources(ctx context.Context, namespaces []string) (*Pod
 			memValue = formatBytes(usage.memBytes)
 		}
 
+		labels := make(map[string]string, len(pod.Labels))
+		for k, v := range pod.Labels {
+			labels[k] = v
+		}
+		annotations := make(map[string]string, len(pod.Annotations))
+		for k, v := range pod.Annotations {
+			annotations[k] = v
+		}
+
 		items = append(items, PodResource{
 			Name:          pod.Name,
 			Namespace:     pod.Namespace,
@@ -81,6 +90,8 @@ func (c *Client) GetPodResources(ctx context.Context, namespaces []string) (*Pod
 			Status:        podStatusLabel(&pod),
 			CreatedAtUnix: pod.CreationTimestamp.Time.Unix(),
 			Age:           formatAge(time.Since(pod.CreationTimestamp.Time)),
+			Labels:        labels,
+			Annotations:   annotations,
 		})
 	}
 

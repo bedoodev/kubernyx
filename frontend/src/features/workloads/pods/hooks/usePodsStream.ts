@@ -19,8 +19,18 @@ export function usePodsStream(clusterFilename: string, selectedNamespaces: strin
   useEffect(() => {
     let active = true
     streamIdRef.current = ''
-    setLoading(true)
     setError(null)
+
+    if (selectedNamespaces.length === 0) {
+      setItems([])
+      setLoading(false)
+      return () => {
+        active = false
+        streamIdRef.current = ''
+      }
+    }
+
+    setLoading(true)
 
     const unsubscribe = EventsOn('pods-stream', (payload: unknown) => {
       if (!active) {

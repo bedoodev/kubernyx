@@ -26,12 +26,36 @@ export function GetClusterConfig(arg1) {
   return window['go']['main']['App']['GetClusterConfig'](arg1);
 }
 
+export function GetDeploymentDetails(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetDeploymentDetails'](arg1, arg2, arg3);
+}
+
+export function GetDeploymentLogs(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetDeploymentLogs'](arg1, arg2, arg3, arg4);
+}
+
+export function GetDeploymentResources(arg1, arg2) {
+  return window['go']['main']['App']['GetDeploymentResources'](arg1, arg2);
+}
+
 export function GetPodDetails(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetPodDetails'](arg1, arg2, arg3);
 }
 
 export function GetPodLogs(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetPodLogs'](arg1, arg2, arg3, arg4);
+}
+
+export function GetWorkloadDetails(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetWorkloadDetails'](arg1, arg2, arg3, arg4);
+}
+
+export function GetWorkloadLogs(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['GetWorkloadLogs'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function GetWorkloadResources(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetWorkloadResources'](arg1, arg2, arg3);
 }
 
 export function GetWorkloads(arg1) {
@@ -52,6 +76,14 @@ export function RenameCluster(arg1, arg2) {
 
 export function SavePodLogsFile(arg1, arg2) {
   return window['go']['main']['App']['SavePodLogsFile'](arg1, arg2);
+}
+
+export function ScaleDeployment(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ScaleDeployment'](arg1, arg2, arg3, arg4);
+}
+
+export function ScaleWorkload(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['ScaleWorkload'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SelectDirectory() {
@@ -80,4 +112,12 @@ export function StopPodsStream() {
 
 export function UpdateClusterConfig(arg1, arg2) {
   return window['go']['main']['App']['UpdateClusterConfig'](arg1, arg2);
+}
+
+export function UpdateDeploymentManifest(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateDeploymentManifest'](arg1, arg2, arg3, arg4);
+}
+
+export function UpdateWorkloadManifest(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['UpdateWorkloadManifest'](arg1, arg2, arg3, arg4, arg5);
 }

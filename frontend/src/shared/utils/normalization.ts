@@ -9,6 +9,9 @@ import type {
   PodDetail,
   PodLogLine,
   PodExecResult,
+  DeploymentResource,
+  DeploymentDetail,
+  DeploymentLogLine,
 } from '../types'
 
 export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
@@ -298,4 +301,157 @@ export function toPodExecResult(data: unknown): PodExecResult {
     stderr: String(record.stderr ?? ''),
     exitCode: Number(record.exitCode ?? 0),
   }
+}
+
+export function toDeploymentResources(data: unknown): DeploymentResource[] {
+  if (!Array.isArray(data)) {
+    return []
+  }
+
+  return data.map(item => {
+    const record = (item ?? {}) as Record<string, unknown>
+    const labelsRecord = (record.labels ?? {}) as Record<string, unknown>
+    const annotationsRecord = (record.annotations ?? {}) as Record<string, unknown>
+    return {
+      name: String(record.name ?? ''),
+      namespace: String(record.namespace ?? ''),
+      pods: String(record.pods ?? '-'),
+      replicas: Number(record.replicas ?? 0),
+      status: String(record.status ?? ''),
+      createdAtUnix: Number(record.createdAtUnix ?? 0),
+      age: String(record.age ?? '-'),
+      labels: Object.fromEntries(
+        Object.entries(labelsRecord).map(([key, value]) => [key, String(value ?? '')]),
+      ),
+      annotations: Object.fromEntries(
+        Object.entries(annotationsRecord).map(([key, value]) => [key, String(value ?? '')]),
+      ),
+    }
+  })
+}
+
+export function toDeploymentDetail(data: unknown): DeploymentDetail {
+  const record = (data ?? {}) as Record<string, unknown>
+
+  const labelsRecord = (record.labels ?? {}) as Record<string, unknown>
+  const annotationsRecord = (record.annotations ?? {}) as Record<string, unknown>
+  const selectorRecord = (record.selector ?? {}) as Record<string, unknown>
+
+  const containers = Array.isArray(record.containers)
+    ? record.containers.map(toPodDetailContainer)
+    : []
+
+  const revisions = Array.isArray(record.revisions)
+    ? record.revisions.map(item => {
+      const value = (item ?? {}) as Record<string, unknown>
+      return {
+        revision: String(value.revision ?? '-'),
+        replicaSet: String(value.replicaSet ?? '-'),
+        replicas: Number(value.replicas ?? 0),
+        ready: Number(value.ready ?? 0),
+        age: String(value.age ?? '-'),
+      }
+    })
+    : []
+
+  const pods = Array.isArray(record.pods)
+    ? record.pods.map(item => {
+      const value = (item ?? {}) as Record<string, unknown>
+      return {
+        name: String(value.name ?? '-'),
+        node: String(value.node ?? '-'),
+        namespace: String(value.namespace ?? '-'),
+        ready: String(value.ready ?? '-'),
+        cpu: String(value.cpu ?? '-'),
+        memory: String(value.memory ?? '-'),
+        status: String(value.status ?? '-'),
+      }
+    })
+    : []
+
+  const conditions = Array.isArray(record.conditions)
+    ? record.conditions.map(item => {
+      const condition = (item ?? {}) as Record<string, unknown>
+      return {
+        type: String(condition.type ?? ''),
+        status: String(condition.status ?? ''),
+        message: String(condition.message ?? '-'),
+      }
+    })
+    : []
+
+  const events = Array.isArray(record.events)
+    ? record.events.map(item => {
+      const event = (item ?? {}) as Record<string, unknown>
+      return {
+        type: String(event.type ?? '-'),
+        reason: String(event.reason ?? '-'),
+        message: String(event.message ?? '-'),
+        count: Number(event.count ?? 0),
+        age: String(event.age ?? '-'),
+      }
+    })
+    : []
+
+  const tolerations = Array.isArray(record.tolerations)
+    ? record.tolerations.map(item => String(item ?? '-'))
+    : []
+  const nodeAffinities = Array.isArray(record.nodeAffinities)
+    ? record.nodeAffinities.map(item => String(item ?? '-'))
+    : []
+  const podAntiAffinities = Array.isArray(record.podAntiAffinities)
+    ? record.podAntiAffinities.map(item => String(item ?? '-'))
+    : []
+
+  return {
+    name: String(record.name ?? ''),
+    namespace: String(record.namespace ?? ''),
+    status: String(record.status ?? '-'),
+    replicas: Number(record.replicas ?? 0),
+    ready: Number(record.ready ?? 0),
+    updated: Number(record.updated ?? 0),
+    available: Number(record.available ?? 0),
+    unavailable: Number(record.unavailable ?? 0),
+    age: String(record.age ?? '-'),
+    created: String(record.created ?? '-'),
+    uid: String(record.uid ?? '-'),
+    resourceVersion: String(record.resourceVersion ?? '-'),
+    labels: Object.fromEntries(
+      Object.entries(labelsRecord).map(([key, value]) => [key, String(value ?? '')]),
+    ),
+    annotations: Object.fromEntries(
+      Object.entries(annotationsRecord).map(([key, value]) => [key, String(value ?? '')]),
+    ),
+    selector: Object.fromEntries(
+      Object.entries(selectorRecord).map(([key, value]) => [key, String(value ?? '')]),
+    ),
+    strategyType: String(record.strategyType ?? '-'),
+    conditions,
+    tolerations,
+    nodeAffinities,
+    podAntiAffinities,
+    containers,
+    revisions,
+    pods,
+    events,
+    manifest: String(record.manifest ?? '-'),
+    scaleSupported: Boolean(record.scaleSupported ?? false),
+  }
+}
+
+export function toDeploymentLogLines(data: unknown): DeploymentLogLine[] {
+  if (!Array.isArray(data)) {
+    return []
+  }
+
+  return data.map(item => {
+    const record = (item ?? {}) as Record<string, unknown>
+    return {
+      podName: String(record.podName ?? '-'),
+      container: String(record.container ?? '-'),
+      createdAt: String(record.createdAt ?? '-'),
+      createdAtUnix: Number(record.createdAtUnix ?? 0),
+      message: String(record.message ?? ''),
+    }
+  })
 }

@@ -1,7 +1,8 @@
-import { WORKLOAD_TAB_OPTIONS } from '../../shared/types'
-import type { ClusterInfo, PodResource, WorkloadTabId } from '../../shared/types'
+import type { ClusterInfo, DeploymentResource, PodResource, WorkloadTabId } from '../../shared/types'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
 import PodsTable from './pods/PodsTable'
+import DeploymentsTable from './deployments/DeploymentsTable'
+import type { NonPodWorkloadTabId } from './workloadKinds'
 import './WorkloadsView.css'
 
 interface Props {
@@ -11,7 +12,9 @@ interface Props {
   selectedNamespaces: string[]
   onNamespacesChange: (ns: string[]) => void
   activePodKey: string | null
+  activeDeploymentKey: string | null
   onPodActivate: (pod: PodResource, options: { pin: boolean }) => void
+  onDeploymentActivate: (deployment: DeploymentResource, options: { pin: boolean }) => void
 }
 
 export default function WorkloadsView({
@@ -21,10 +24,10 @@ export default function WorkloadsView({
   selectedNamespaces,
   onNamespacesChange,
   activePodKey,
+  activeDeploymentKey,
   onPodActivate,
+  onDeploymentActivate,
 }: Props) {
-  const activeLabel = WORKLOAD_TAB_OPTIONS.find(tab => tab.id === activeTab)?.label ?? 'Workloads'
-
   return (
     <div className="workloads-view">
       <div className="workloads-view-header">
@@ -35,11 +38,12 @@ export default function WorkloadsView({
           className="workloads-namespace-filter"
           namespaces={namespaces}
           selected={selectedNamespaces}
+          emptyMeansAll={false}
           onChange={onNamespacesChange}
         />
       </div>
 
-      <div className={`workloads-panel ${activeTab === 'pods' ? 'pods-mode' : ''}`}>
+      <div className="workloads-panel pods-mode">
         {activeTab === 'pods' ? (
           <PodsTable
             clusterFilename={cluster.filename}
@@ -49,10 +53,13 @@ export default function WorkloadsView({
             onPodActivate={onPodActivate}
           />
         ) : (
-          <>
-            <h3>{activeLabel}</h3>
-            <p>Coming soon...</p>
-          </>
+          <DeploymentsTable
+            clusterFilename={cluster.filename}
+            selectedNamespaces={selectedNamespaces}
+            workloadTab={activeTab as NonPodWorkloadTabId}
+            externalSelectedDeploymentKey={activeDeploymentKey}
+            onDeploymentActivate={onDeploymentActivate}
+          />
         )}
       </div>
     </div>
