@@ -6,7 +6,7 @@ import { toPodExecResult, toPodLogLines } from '../../../../shared/utils/normali
 import YamlEditor from '../../../../shared/components/YamlEditor'
 
 export type PodDetailsTabId = 'overview' | 'metadata' | 'init-containers' | 'containers' | 'logs' | 'shell' | 'usages' | 'manifest'
-type MetadataSectionKey = 'labels' | 'annotations' | 'volumes'
+type MetadataSectionKey = 'labels' | 'annotations'
 type InitSectionKey = 'env' | 'mounts'
 type ContainerSectionKey = 'env' | 'ports' | 'mounts' | 'args'
 type LogToneKey = 'error' | 'success' | 'warning' | 'debug' | 'default'
@@ -251,8 +251,8 @@ export default function PodDetailPanel({
   const [metadataOpenSections, setMetadataOpenSections] = useState<Record<MetadataSectionKey, boolean>>({
     labels: false,
     annotations: false,
-    volumes: false,
   })
+  const [volumeTypeOpenByType, setVolumeTypeOpenByType] = useState<Record<string, boolean>>({})
   const [initExpandedByKey, setInitExpandedByKey] = useState<Record<string, boolean>>({})
   const [initEnvOpenByKey, setInitEnvOpenByKey] = useState<Record<string, boolean>>({})
   const [initMountsOpenByKey, setInitMountsOpenByKey] = useState<Record<string, boolean>>({})
@@ -339,6 +339,27 @@ export default function PodDetailPanel({
   const metadataAnnotations = Object.entries(podDetail?.annotations ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataOwnerReferences = podDetail?.ownerReferences ?? []
   const metadataVolumes = podDetail?.volumes ?? []
+  const metadataVolumeGroups = useMemo(() => {
+    const grouped = new Map<string, typeof metadataVolumes>()
+    for (const volume of metadataVolumes) {
+      const type = (volume.type || '').trim() || 'Unknown'
+      if (!grouped.has(type)) {
+        grouped.set(type, [])
+      }
+      grouped.get(type)?.push(volume)
+    }
+
+    return Array.from(grouped.entries())
+      .map(([type, items]) => ({
+        type,
+        items: [...items].sort((left, right) => left.name.localeCompare(right.name)),
+      }))
+      .sort((left, right) => left.type.localeCompare(right.type))
+  }, [metadataVolumes])
+  const metadataVolumeTypes = useMemo(
+    () => metadataVolumeGroups.map(group => group.type),
+    [metadataVolumeGroups],
+  )
 
   const initContainerKeys = useMemo(
     () => overviewInitContainers.map((container, index) => `init:${index}:${container.name}`),
@@ -357,6 +378,10 @@ export default function PodDetailPanel({
     setInitEnvOpenByKey(current => syncToggleState(current, initContainerKeys, false))
     setInitMountsOpenByKey(current => syncToggleState(current, initContainerKeys, false))
   }, [initContainerKeys])
+
+  useEffect(() => {
+    setVolumeTypeOpenByType(current => syncToggleState(current, metadataVolumeTypes, false))
+  }, [metadataVolumeTypes])
 
   useEffect(() => {
     if (overviewContainers.length === 0) {
@@ -418,6 +443,7 @@ export default function PodDetailPanel({
     setInitLogsDataByKey({})
     setInitLogsLoadingByKey({})
     setInitLogsErrorByKey({})
+    setVolumeTypeOpenByType({})
     setShellContainerOpen(false)
     setShellSessions({})
   }, [selectedPod.namespace, selectedPod.name])
@@ -685,6 +711,13 @@ export default function PodDetailPanel({
     setMetadataOpenSections(current => ({
       ...current,
       [section]: !current[section],
+    }))
+  }
+
+  const toggleVolumeTypeSection = (type: string) => {
+    setVolumeTypeOpenByType(current => ({
+      ...current,
+      [type]: !current[type],
     }))
   }
 
@@ -2078,48 +2111,51 @@ export default function PodDetailPanel({
 
             <section className="pods-meta-card">
               <header className="pods-meta-card-header">
-                <button
-                  type="button"
-                  className={`pods-meta-header-btn ${metadataOpenSections.volumes ? 'is-open' : ''}`}
-                  onClick={() => toggleMetadataSection('volumes')}
-                  aria-label={metadataOpenSections.volumes ? 'Collapse pod volumes' : 'Expand pod volumes'}
-                  aria-expanded={metadataOpenSections.volumes}
-                >
+                <div className="pods-meta-header-static">
                   <div className="pods-meta-title">
-                    <span className="pods-meta-chevron">▾</span>
                     <span>Pod Volumes</span>
                   </div>
                   <span className="pods-meta-count">{metadataVolumes.length}</span>
-                </button>
-              </header>
-              {metadataOpenSections.volumes ? (
-                <div className="pods-detail-table-wrap">
-                  <table className="pods-detail-table pods-volume-table">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {metadataVolumes.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className="pods-detail-empty">No volumes</td>
-                        </tr>
-                      ) : (
-                        metadataVolumes.map((volume, index) => (
-                          <tr key={`${volume.name}-${index}`}>
-                            <td className="pods-detail-value-cell">{volume.name || '-'}</td>
-                            <td className="pods-detail-value-cell">{volume.type || '-'}</td>
-                            <td className="pods-volume-details pods-detail-value-cell">{volume.details || '-'}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
                 </div>
-              ) : null}
+              </header>
+              {metadataVolumeGroups.length === 0 ? (
+                <p className="pods-meta-empty">No volumes</p>
+              ) : (
+                <div className="pods-meta-volumes">
+                  {metadataVolumeGroups.map(group => {
+                    const isOpen = volumeTypeOpenByType[group.type] ?? false
+                    return (
+                      <article key={group.type} className="pods-meta-volume-group">
+                        <button
+                          type="button"
+                          className={`pods-meta-volume-toggle ${isOpen ? 'is-open' : ''}`}
+                          onClick={() => toggleVolumeTypeSection(group.type)}
+                          aria-label={isOpen ? `Collapse ${group.type} volumes` : `Expand ${group.type} volumes`}
+                          aria-expanded={isOpen}
+                        >
+                          <span className="pods-meta-volume-toggle-left">
+                            <span className="pods-meta-chevron">▾</span>
+                            <span className="pods-meta-volume-type">{group.type}</span>
+                          </span>
+                          <span className="pods-meta-volume-count">
+                            {group.items.length} {group.items.length === 1 ? 'volume' : 'volumes'}
+                          </span>
+                        </button>
+                        {!isOpen ? null : (
+                          <div className="pods-meta-volume-body">
+                            {group.items.map((volume, index) => (
+                              <div key={`${group.type}-${volume.name}-${index}`} className="pods-meta-item pods-meta-volume-item">
+                                <span className="pods-meta-key">{volume.name || '-'}</span>
+                                <span className="pods-meta-volume-detail">{volume.details || '-'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
             </section>
           </>
         ) : activeDetailsTab === 'init-containers' ? (
