@@ -368,6 +368,20 @@ func (c *Client) GetPodLogs(ctx context.Context, namespace string, name string, 
 	return result, nil
 }
 
+func (c *Client) DeletePod(ctx context.Context, namespace string, name string) error {
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("pod name is required")
+	}
+
+	if err := c.clientset.CoreV1().Pods(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		return fmt.Errorf("failed to delete pod: %w", err)
+	}
+	return nil
+}
+
 func parsePodLogLine(line string) (string, int64, string) {
 	parts := strings.SplitN(line, " ", 2)
 	if len(parts) != 2 {

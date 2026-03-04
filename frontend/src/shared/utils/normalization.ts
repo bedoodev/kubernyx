@@ -317,6 +317,12 @@ export function toDeploymentResources(data: unknown): DeploymentResource[] {
       namespace: String(record.namespace ?? ''),
       pods: String(record.pods ?? '-'),
       replicas: Number(record.replicas ?? 0),
+      desired: Number(record.desired ?? record.replicas ?? 0),
+      current: Number(record.current ?? 0),
+      ready: Number(record.ready ?? 0),
+      upToDate: Number(record.upToDate ?? 0),
+      available: Number(record.available ?? 0),
+      nodeSelector: String(record.nodeSelector ?? '-'),
       status: String(record.status ?? ''),
       createdAtUnix: Number(record.createdAtUnix ?? 0),
       age: String(record.age ?? '-'),
@@ -336,6 +342,7 @@ export function toDeploymentDetail(data: unknown): DeploymentDetail {
   const labelsRecord = (record.labels ?? {}) as Record<string, unknown>
   const annotationsRecord = (record.annotations ?? {}) as Record<string, unknown>
   const selectorRecord = (record.selector ?? {}) as Record<string, unknown>
+  const nodeSelectorRecord = (record.nodeSelector ?? {}) as Record<string, unknown>
 
   const containers = Array.isArray(record.containers)
     ? record.containers.map(toPodDetailContainer)
@@ -408,6 +415,7 @@ export function toDeploymentDetail(data: unknown): DeploymentDetail {
     namespace: String(record.namespace ?? ''),
     status: String(record.status ?? '-'),
     replicas: Number(record.replicas ?? 0),
+    current: Number(record.current ?? 0),
     ready: Number(record.ready ?? 0),
     updated: Number(record.updated ?? 0),
     available: Number(record.available ?? 0),
@@ -424,6 +432,9 @@ export function toDeploymentDetail(data: unknown): DeploymentDetail {
     ),
     selector: Object.fromEntries(
       Object.entries(selectorRecord).map(([key, value]) => [key, String(value ?? '')]),
+    ),
+    nodeSelector: Object.fromEntries(
+      Object.entries(nodeSelectorRecord).map(([key, value]) => [key, String(value ?? '')]),
     ),
     strategyType: String(record.strategyType ?? '-'),
     conditions,

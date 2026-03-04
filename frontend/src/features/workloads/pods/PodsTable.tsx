@@ -505,18 +505,26 @@ export default function PodsTable({
                     const podKey = getPodKey(item)
                     const isSelected = visibleSelectedPodKey === podKey
                     const isFocused = focusedRowIndex === index
+                    const activatePodFromNameCell = (event: ReactMouseEvent<HTMLElement>) => {
+                      const pin = event.detail >= 2
+                      onPodActivate?.(item, { pin })
+                      if (showInlineDetails) {
+                        openPodDetails(item)
+                      }
+                    }
                     return (
                       <tr key={podKey} className={`${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}>
-                        <td className="pods-name-cell pods-cell" title={item.name}>
+                        <td
+                          className="pods-name-cell pods-cell"
+                          title={item.name}
+                          onClick={activatePodFromNameCell}
+                        >
                           <button
                             type="button"
                             className={`pods-name-button ${isSelected ? 'active' : ''}`}
                             onClick={event => {
-                              const pin = event.detail >= 2
-                              onPodActivate?.(item, { pin })
-                              if (showInlineDetails) {
-                                openPodDetails(item)
-                              }
+                              event.stopPropagation()
+                              activatePodFromNameCell(event)
                             }}
                           >
                             {item.name}

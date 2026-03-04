@@ -90,6 +90,30 @@ func selectorMap(selector *metav1.LabelSelector) map[string]string {
 	return result
 }
 
+func podTemplateNodeSelectorMap(template corev1.PodTemplateSpec) map[string]string {
+	result := make(map[string]string)
+	for key, value := range template.Spec.NodeSelector {
+		result[key] = value
+	}
+	return result
+}
+
+func formatNodeSelectorMap(nodeSelector map[string]string) string {
+	if len(nodeSelector) == 0 {
+		return "-"
+	}
+	keys := make([]string, 0, len(nodeSelector))
+	for key := range nodeSelector {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", key, nodeSelector[key]))
+	}
+	return strings.Join(parts, ", ")
+}
+
 func podTemplateTolerations(template corev1.PodTemplateSpec) []string {
 	tolerations := template.Spec.Tolerations
 	items := make([]string, 0, len(tolerations))
@@ -464,6 +488,12 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Namespace:     item.Namespace,
 					Pods:          fmt.Sprintf("%d/%d", item.Status.NumberReady, item.Status.DesiredNumberScheduled),
 					Replicas:      item.Status.DesiredNumberScheduled,
+					Desired:       item.Status.DesiredNumberScheduled,
+					Current:       item.Status.CurrentNumberScheduled,
+					Ready:         item.Status.NumberReady,
+					UpToDate:      item.Status.UpdatedNumberScheduled,
+					Available:     item.Status.NumberAvailable,
+					NodeSelector:  formatNodeSelectorMap(item.Spec.Template.Spec.NodeSelector),
 					Status:        workloadStatusFromPhase(classifyDaemonSet(item)),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -484,6 +514,12 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Namespace:     item.Namespace,
 					Pods:          fmt.Sprintf("%d/%d", item.Status.ReadyReplicas, replicas),
 					Replicas:      replicas,
+					Desired:       replicas,
+					Current:       item.Status.CurrentReplicas,
+					Ready:         item.Status.ReadyReplicas,
+					UpToDate:      item.Status.UpdatedReplicas,
+					Available:     item.Status.ReadyReplicas,
+					NodeSelector:  formatNodeSelectorMap(item.Spec.Template.Spec.NodeSelector),
 					Status:        workloadStatusFromPhase(classifyStatefulSet(item)),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -504,6 +540,12 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Namespace:     item.Namespace,
 					Pods:          fmt.Sprintf("%d/%d", item.Status.ReadyReplicas, replicas),
 					Replicas:      replicas,
+					Desired:       replicas,
+					Current:       item.Status.Replicas,
+					Ready:         item.Status.ReadyReplicas,
+					UpToDate:      item.Status.Replicas,
+					Available:     item.Status.ReadyReplicas,
+					NodeSelector:  formatNodeSelectorMap(item.Spec.Template.Spec.NodeSelector),
 					Status:        workloadStatusFromPhase(classifyReplicaSet(item)),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -528,6 +570,12 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Namespace:     item.Namespace,
 					Pods:          fmt.Sprintf("%d/%s", item.Status.Succeeded, completions),
 					Replicas:      parallelism,
+					Desired:       parallelism,
+					Current:       item.Status.Active,
+					Ready:         int32(item.Status.Succeeded),
+					UpToDate:      int32(item.Status.Succeeded),
+					Available:     int32(item.Status.Succeeded),
+					NodeSelector:  formatNodeSelectorMap(item.Spec.Template.Spec.NodeSelector),
 					Status:        jobStatusLabel(&item),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -548,6 +596,12 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Namespace:     item.Namespace,
 					Pods:          fmt.Sprintf("%d/-", active),
 					Replicas:      active,
+					Desired:       active,
+					Current:       active,
+					Ready:         active,
+					UpToDate:      active,
+					Available:     active,
+					NodeSelector:  formatNodeSelectorMap(item.Spec.JobTemplate.Spec.Template.Spec.NodeSelector),
 					Status:        cronJobStatusLabel(&item),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -867,6 +921,51 @@ func (c *Client) ScaleWorkload(ctx context.Context, kind string, namespace strin
 	}
 }
 
+func (c *Client) DeleteWorkload(ctx context.Context, kind string, namespace string, name string) error {
+	controllerKind, err := parseWorkloadControllerKind(kind)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("resource name is required")
+	}
+
+	switch controllerKind {
+	case workloadControllerDeployment:
+		return c.DeleteDeployment(ctx, namespace, name)
+	case workloadControllerDaemonSet:
+		if deleteErr := c.clientset.AppsV1().DaemonSets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete daemon set: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerStateful:
+		if deleteErr := c.clientset.AppsV1().StatefulSets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete stateful set: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerReplica:
+		if deleteErr := c.clientset.AppsV1().ReplicaSets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete replica set: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerJob:
+		if deleteErr := c.clientset.BatchV1().Jobs(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete job: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerCronJob:
+		if deleteErr := c.clientset.BatchV1().CronJobs(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete cronjob: %w", deleteErr)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported workload kind %q", kind)
+	}
+}
+
 func (c *Client) getDaemonSetDetail(ctx context.Context, namespace string, name string) (*DeploymentDetail, error) {
 	daemonSet, err := c.clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -902,6 +1001,7 @@ func (c *Client) getDaemonSetDetail(ctx context.Context, namespace string, name 
 		Namespace:       daemonSet.Namespace,
 		Status:          workloadStatusFromPhase(classifyDaemonSet(*daemonSet)),
 		Replicas:        daemonSet.Status.DesiredNumberScheduled,
+		Current:         daemonSet.Status.CurrentNumberScheduled,
 		Ready:           daemonSet.Status.NumberReady,
 		Updated:         daemonSet.Status.UpdatedNumberScheduled,
 		Available:       daemonSet.Status.NumberAvailable,
@@ -913,6 +1013,7 @@ func (c *Client) getDaemonSetDetail(ctx context.Context, namespace string, name 
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selectorMap(daemonSet.Spec.Selector),
+		NodeSelector:    podTemplateNodeSelectorMap(daemonSet.Spec.Template),
 		StrategyType:    stringOrDefault(string(daemonSet.Spec.UpdateStrategy.Type), "-"),
 		Conditions:      conditions,
 		Tolerations:     podTemplateTolerations(daemonSet.Spec.Template),
@@ -963,6 +1064,7 @@ func (c *Client) getStatefulSetDetail(ctx context.Context, namespace string, nam
 		Namespace:       statefulSet.Namespace,
 		Status:          workloadStatusFromPhase(classifyStatefulSet(*statefulSet)),
 		Replicas:        replicas,
+		Current:         statefulSet.Status.CurrentReplicas,
 		Ready:           statefulSet.Status.ReadyReplicas,
 		Updated:         statefulSet.Status.UpdatedReplicas,
 		Available:       statefulSet.Status.ReadyReplicas,
@@ -974,6 +1076,7 @@ func (c *Client) getStatefulSetDetail(ctx context.Context, namespace string, nam
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selectorMap(statefulSet.Spec.Selector),
+		NodeSelector:    podTemplateNodeSelectorMap(statefulSet.Spec.Template),
 		StrategyType:    stringOrDefault(string(statefulSet.Spec.UpdateStrategy.Type), "-"),
 		Conditions:      conditions,
 		Tolerations:     podTemplateTolerations(statefulSet.Spec.Template),
@@ -1024,6 +1127,7 @@ func (c *Client) getReplicaSetDetail(ctx context.Context, namespace string, name
 		Namespace:       replicaSet.Namespace,
 		Status:          workloadStatusFromPhase(classifyReplicaSet(*replicaSet)),
 		Replicas:        replicas,
+		Current:         replicaSet.Status.Replicas,
 		Ready:           replicaSet.Status.ReadyReplicas,
 		Updated:         replicaSet.Status.Replicas,
 		Available:       replicaSet.Status.ReadyReplicas,
@@ -1035,6 +1139,7 @@ func (c *Client) getReplicaSetDetail(ctx context.Context, namespace string, name
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selectorMap(replicaSet.Spec.Selector),
+		NodeSelector:    podTemplateNodeSelectorMap(replicaSet.Spec.Template),
 		StrategyType:    "-",
 		Conditions:      conditions,
 		Tolerations:     podTemplateTolerations(replicaSet.Spec.Template),
@@ -1094,6 +1199,7 @@ func (c *Client) getJobDetail(ctx context.Context, namespace string, name string
 		Namespace:       job.Namespace,
 		Status:          jobStatusLabel(job),
 		Replicas:        parallelism,
+		Current:         job.Status.Active,
 		Ready:           job.Status.Active,
 		Updated:         int32(job.Status.Succeeded),
 		Available:       int32(job.Status.Succeeded),
@@ -1105,6 +1211,7 @@ func (c *Client) getJobDetail(ctx context.Context, namespace string, name string
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selector,
+		NodeSelector:    podTemplateNodeSelectorMap(job.Spec.Template),
 		StrategyType:    strategyType,
 		Conditions:      conditions,
 		Tolerations:     podTemplateTolerations(job.Spec.Template),
@@ -1207,6 +1314,7 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 		Namespace:       cronJob.Namespace,
 		Status:          cronJobStatusLabel(cronJob),
 		Replicas:        activeCount,
+		Current:         activeCount,
 		Ready:           activeCount,
 		Updated:         int32(len(ownedJobs)),
 		Available:       activeCount,
@@ -1218,6 +1326,7 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selector,
+		NodeSelector:    podTemplateNodeSelectorMap(cronJob.Spec.JobTemplate.Spec.Template),
 		StrategyType:    stringOrDefault(string(cronJob.Spec.ConcurrencyPolicy), "-"),
 		Conditions:      conditions,
 		Tolerations:     podTemplateTolerations(cronJob.Spec.JobTemplate.Spec.Template),

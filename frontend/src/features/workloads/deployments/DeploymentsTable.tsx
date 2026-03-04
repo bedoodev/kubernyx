@@ -19,7 +19,19 @@ interface Props {
 const STATUS_ALL = 'all'
 const PAGE_SIZE_OPTIONS = [20, 50] as const
 
-type DeploymentColumnKey = 'name' | 'namespace' | 'pods' | 'replicas' | 'status' | 'age'
+type DeploymentColumnKey =
+  | 'name'
+  | 'namespace'
+  | 'pods'
+  | 'replicas'
+  | 'desired'
+  | 'current'
+  | 'ready'
+  | 'upToDate'
+  | 'available'
+  | 'nodeSelector'
+  | 'status'
+  | 'age'
 
 type DeploymentColumn = {
   key: DeploymentColumnKey
@@ -34,8 +46,35 @@ const DEPLOYMENT_COLUMNS: DeploymentColumn[] = [
   { key: 'namespace', label: 'Namespace', minWidth: 140, defaultWidth: 200, maxWidth: 360 },
   { key: 'pods', label: 'Pods', minWidth: 100, defaultWidth: 140, maxWidth: 220 },
   { key: 'replicas', label: 'Replicas', minWidth: 100, defaultWidth: 130, maxWidth: 220 },
+  { key: 'desired', label: 'Desired', minWidth: 90, defaultWidth: 120, maxWidth: 200 },
+  { key: 'current', label: 'Current', minWidth: 90, defaultWidth: 120, maxWidth: 200 },
+  { key: 'ready', label: 'Ready', minWidth: 90, defaultWidth: 120, maxWidth: 200 },
+  { key: 'upToDate', label: 'Up-to-date', minWidth: 100, defaultWidth: 140, maxWidth: 240 },
+  { key: 'available', label: 'Available', minWidth: 100, defaultWidth: 130, maxWidth: 220 },
+  { key: 'nodeSelector', label: 'Node Selector', minWidth: 180, defaultWidth: 280, maxWidth: 620 },
   { key: 'status', label: 'Status', minWidth: 140, defaultWidth: 210, maxWidth: 320 },
   { key: 'age', label: 'Age', minWidth: 80, defaultWidth: 110, maxWidth: 180 },
+]
+
+const DAEMON_SET_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'desired',
+  'current',
+  'ready',
+  'upToDate',
+  'available',
+  'nodeSelector',
+  'age',
+]
+
+const DEFAULT_WORKLOAD_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'pods',
+  'replicas',
+  'status',
+  'age',
 ]
 
 type ColumnWidthState = Record<DeploymentColumnKey, number>
@@ -83,6 +122,17 @@ export default function DeploymentsTable({
 }: Props) {
   const { items, loading, error } = useDeployments(clusterFilename, selectedNamespaces, workloadTab)
   const pluralLabel = workloadPluralLabel(workloadTab)
+  const visibleColumnKeys = workloadTab === 'daemon-sets' ? DAEMON_SET_COLUMNS : DEFAULT_WORKLOAD_COLUMNS
+  const columnByKey = useMemo(
+    () => new Map(DEPLOYMENT_COLUMNS.map(column => [column.key, column])),
+    [],
+  )
+  const visibleColumns = useMemo(
+    () => visibleColumnKeys
+      .map(key => columnByKey.get(key))
+      .filter((column): column is DeploymentColumn => Boolean(column)),
+    [visibleColumnKeys, columnByKey],
+  )
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_ALL)
@@ -149,8 +199,8 @@ export default function DeploymentsTable({
   }, [])
 
   const tableMinWidth = useMemo(
-    () => DEPLOYMENT_COLUMNS.reduce((total, column) => total + columnWidths[column.key], 0),
-    [columnWidths],
+    () => visibleColumns.reduce((total, column) => total + columnWidths[column.key], 0),
+    [columnWidths, visibleColumns],
   )
   const tableWidth = Math.max(tableMinWidth, tableViewportWidth)
 
@@ -177,6 +227,13 @@ export default function DeploymentsTable({
         || item.namespace.toLowerCase().includes(query)
         || item.status.toLowerCase().includes(query)
         || item.pods.toLowerCase().includes(query)
+        || String(item.replicas ?? '').toLowerCase().includes(query)
+        || String(item.desired ?? '').toLowerCase().includes(query)
+        || String(item.current ?? '').toLowerCase().includes(query)
+        || String(item.ready ?? '').toLowerCase().includes(query)
+        || String(item.upToDate ?? '').toLowerCase().includes(query)
+        || String(item.available ?? '').toLowerCase().includes(query)
+        || String(item.nodeSelector ?? '').toLowerCase().includes(query)
       ) {
         return true
       }
@@ -216,6 +273,18 @@ export default function DeploymentsTable({
           return direction * (parsePodRatio(left.pods) - parsePodRatio(right.pods))
         case 'replicas':
           return direction * (left.replicas - right.replicas)
+        case 'desired':
+          return direction * ((left.desired ?? left.replicas) - (right.desired ?? right.replicas))
+        case 'current':
+          return direction * ((left.current ?? 0) - (right.current ?? 0))
+        case 'ready':
+          return direction * ((left.ready ?? 0) - (right.ready ?? 0))
+        case 'upToDate':
+          return direction * ((left.upToDate ?? 0) - (right.upToDate ?? 0))
+        case 'available':
+          return direction * ((left.available ?? 0) - (right.available ?? 0))
+        case 'nodeSelector':
+          return direction * (left.nodeSelector ?? '').localeCompare(right.nodeSelector ?? '')
         case 'status':
           return direction * left.status.localeCompare(right.status)
         case 'age':
@@ -347,13 +416,13 @@ export default function DeploymentsTable({
           <div className="pods-table-wrap" ref={tableWrapRef} tabIndex={0} onKeyDown={handleTableKeyDown}>
             <table className="pods-table" style={{ width: `${tableWidth}px`, minWidth: `${tableWidth}px` }}>
               <colgroup>
-                {DEPLOYMENT_COLUMNS.map(column => (
+                {visibleColumns.map(column => (
                   <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
                 ))}
               </colgroup>
               <thead>
                 <tr>
-                  {DEPLOYMENT_COLUMNS.map((column, index) => (
+                  {visibleColumns.map((column, index) => (
                     <th key={column.key}>
                       <div className="pods-th-content">
                         <button
@@ -361,8 +430,8 @@ export default function DeploymentsTable({
                           className="pods-th-sort"
                           onClick={() => handleSort(column.key)}
                           aria-label={`Sort by ${column.label}`}
-                        >
-                          <span className="pods-th-label">{column.label}</span>
+                          >
+                            <span className="pods-th-label">{column.label}</span>
                           <svg
                             className={`pods-sort-icon ${sortKey === column.key ? 'active' : ''}`}
                             width="10"
@@ -382,7 +451,7 @@ export default function DeploymentsTable({
                             />
                           </svg>
                         </button>
-                        {index < DEPLOYMENT_COLUMNS.length - 1 && (
+                        {index < visibleColumns.length - 1 && (
                           <button
                             type="button"
                             className={`pods-col-resizer ${columnResize.isResizing && activeColumnKeyRef.current === column.key ? 'active' : ''}`}
@@ -398,46 +467,85 @@ export default function DeploymentsTable({
               <tbody ref={tableBodyRef}>
                 {error ? (
                   <tr>
-                    <td colSpan={DEPLOYMENT_COLUMNS.length} className="pods-empty-row error">{error}</td>
+                    <td colSpan={visibleColumns.length} className="pods-empty-row error">{error}</td>
                   </tr>
                 ) : loading ? (
                   <tr>
-                    <td colSpan={DEPLOYMENT_COLUMNS.length} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td>
+                    <td colSpan={visibleColumns.length} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td>
                   </tr>
                 ) : sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={DEPLOYMENT_COLUMNS.length} className="pods-empty-row">{emptyStateMessage}</td>
+                    <td colSpan={visibleColumns.length} className="pods-empty-row">{emptyStateMessage}</td>
                   </tr>
                 ) : (
                   pagedItems.map((item, index) => {
                     const key = getDeploymentKey(item)
                     const isSelected = externalSelectedDeploymentKey === key
                     const isFocused = focusedRowIndex === index
+                    const activateDeploymentFromNameCell = (event: ReactMouseEvent<HTMLElement>) => {
+                      const pin = event.detail >= 2
+                      onDeploymentActivate?.(item, { pin })
+                    }
                     return (
                       <tr key={key} className={`${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}>
-                        <td className="pods-name-cell pods-cell" title={item.name}>
-                          <button
-                            type="button"
-                            className={`pods-name-button ${isSelected ? 'active' : ''}`}
-                            onClick={event => {
-                              const pin = event.detail >= 2
-                              onDeploymentActivate?.(item, { pin })
-                            }}
-                          >
-                            {item.name}
-                          </button>
-                        </td>
-                        <td className="pods-cell" title={item.namespace}>{item.namespace}</td>
-                        <td className="pods-cell" title={item.pods}>{item.pods}</td>
-                        <td className="pods-cell" title={String(item.replicas)}>{item.replicas}</td>
-                        <td>
-                          <span className={`pods-status-pill ${normalizeStatus(item.status)}`} title={item.status}>
-                            {item.status}
-                          </span>
-                        </td>
-                        <td className="pods-cell">
-                          {item.createdAtUnix ? formatAgeFromUnix(item.createdAtUnix, nowUnix) : (item.age ?? '-')}
-                        </td>
+                        {visibleColumns.map(column => {
+                          switch (column.key) {
+                            case 'name':
+                              return (
+                                <td
+                                  key={column.key}
+                                  className="pods-name-cell pods-cell"
+                                  title={item.name}
+                                  onClick={activateDeploymentFromNameCell}
+                                >
+                                  <button
+                                    type="button"
+                                    className={`pods-name-button ${isSelected ? 'active' : ''}`}
+                                    onClick={event => {
+                                      event.stopPropagation()
+                                      activateDeploymentFromNameCell(event)
+                                    }}
+                                  >
+                                    {item.name}
+                                  </button>
+                                </td>
+                              )
+                            case 'namespace':
+                              return <td key={column.key} className="pods-cell" title={item.namespace}>{item.namespace}</td>
+                            case 'pods':
+                              return <td key={column.key} className="pods-cell" title={item.pods}>{item.pods}</td>
+                            case 'replicas':
+                              return <td key={column.key} className="pods-cell" title={String(item.replicas)}>{item.replicas}</td>
+                            case 'desired':
+                              return <td key={column.key} className="pods-cell" title={String(item.desired ?? item.replicas ?? 0)}>{item.desired ?? item.replicas ?? 0}</td>
+                            case 'current':
+                              return <td key={column.key} className="pods-cell" title={String(item.current ?? 0)}>{item.current ?? 0}</td>
+                            case 'ready':
+                              return <td key={column.key} className="pods-cell" title={String(item.ready ?? 0)}>{item.ready ?? 0}</td>
+                            case 'upToDate':
+                              return <td key={column.key} className="pods-cell" title={String(item.upToDate ?? 0)}>{item.upToDate ?? 0}</td>
+                            case 'available':
+                              return <td key={column.key} className="pods-cell" title={String(item.available ?? 0)}>{item.available ?? 0}</td>
+                            case 'nodeSelector':
+                              return <td key={column.key} className="pods-cell" title={item.nodeSelector ?? '-'}>{item.nodeSelector ?? '-'}</td>
+                            case 'status':
+                              return (
+                                <td key={column.key}>
+                                  <span className={`pods-status-pill ${normalizeStatus(item.status)}`} title={item.status}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                              )
+                            case 'age':
+                              return (
+                                <td key={column.key} className="pods-cell">
+                                  {item.createdAtUnix ? formatAgeFromUnix(item.createdAtUnix, nowUnix) : (item.age ?? '-')}
+                                </td>
+                              )
+                            default:
+                              return <td key={column.key} className="pods-cell">-</td>
+                          }
+                        })}
                       </tr>
                     )
                   })

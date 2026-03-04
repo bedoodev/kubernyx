@@ -3,6 +3,12 @@ export interface DeploymentResource {
   namespace: string;
   pods: string;
   replicas: number;
+  desired?: number;
+  current?: number;
+  ready?: number;
+  upToDate?: number;
+  available?: number;
+  nodeSelector?: string;
   status: string;
   createdAtUnix?: number;
   age?: string;
@@ -41,6 +47,7 @@ export interface DeploymentDetail {
   namespace: string;
   status: string;
   replicas: number;
+  current?: number;
   ready: number;
   updated: number;
   available: number;
@@ -52,6 +59,7 @@ export interface DeploymentDetail {
   labels: Record<string, string>;
   annotations: Record<string, string>;
   selector: Record<string, string>;
+  nodeSelector?: Record<string, string>;
   strategyType: string;
   conditions: Array<{ type: string; status: string; message: string }>;
   tolerations: string[];

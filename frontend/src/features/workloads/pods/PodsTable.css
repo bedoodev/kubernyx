@@ -445,6 +445,7 @@
 .pods-name-cell {
   color: var(--accent);
   font-weight: 600;
+  cursor: pointer;
 }
 
 .pods-name-button {
@@ -783,6 +784,11 @@
   border-color: var(--accent-dim);
   background: var(--bg-hover);
   color: var(--accent);
+}
+
+.pods-detail-icon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .pods-detail-icon-btn.danger {
@@ -1163,11 +1169,34 @@
 
 .pods-meta-item {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
   color: #ffffff;
   font-size: var(--detail-value-size);
   overflow-wrap: anywhere;
+}
+
+.pods-meta-item.is-json {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.pods-meta-value-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  --meta-collapsed-line-height: 20px;
+  --meta-collapsed-lines: 8;
+}
+
+.pods-meta-value-block.is-collapsed {
+  position: relative;
+}
+
+.pods-meta-value-block.is-collapsed::after {
+  content: none;
 }
 
 .pods-meta-owner-item {
@@ -1201,6 +1230,54 @@
   color: #ffffff;
   font-size: var(--detail-value-size);
   font-weight: var(--detail-value-weight);
+}
+
+.pods-meta-text-value {
+  color: #ffffff;
+  min-width: 0;
+  line-height: var(--meta-collapsed-line-height, 20px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pods-meta-text-value.is-collapsed,
+.pods-meta-json-value.is-collapsed {
+  max-height: calc(var(--meta-collapsed-line-height, 20px) * var(--meta-collapsed-lines, 8));
+  overflow: hidden;
+}
+
+.pods-meta-json-value {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #cfe2ff;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: var(--meta-collapsed-line-height, 20px);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+}
+
+.pods-meta-expand-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  align-self: flex-start;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.pods-meta-expand-btn:hover {
+  color: #9eb6ff;
+  text-decoration: underline;
 }
 
 .pods-meta-grid-two {

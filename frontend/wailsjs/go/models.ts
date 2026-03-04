@@ -310,6 +310,7 @@ export namespace kube {
 	    namespace: string;
 	    status: string;
 	    replicas: number;
+	    current: number;
 	    ready: number;
 	    updated: number;
 	    available: number;
@@ -321,6 +322,7 @@ export namespace kube {
 	    labels: Record<string, string>;
 	    annotations: Record<string, string>;
 	    selector: Record<string, string>;
+	    nodeSelector: Record<string, string>;
 	    strategyType: string;
 	    conditions: PodDetailCondition[];
 	    tolerations: string[];
@@ -343,6 +345,7 @@ export namespace kube {
 	        this.namespace = source["namespace"];
 	        this.status = source["status"];
 	        this.replicas = source["replicas"];
+	        this.current = source["current"];
 	        this.ready = source["ready"];
 	        this.updated = source["updated"];
 	        this.available = source["available"];
@@ -354,6 +357,7 @@ export namespace kube {
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
 	        this.selector = source["selector"];
+	        this.nodeSelector = source["nodeSelector"];
 	        this.strategyType = source["strategyType"];
 	        this.conditions = this.convertValues(source["conditions"], PodDetailCondition);
 	        this.tolerations = source["tolerations"];
@@ -412,6 +416,12 @@ export namespace kube {
 	    namespace: string;
 	    pods: string;
 	    replicas: number;
+	    desired: number;
+	    current: number;
+	    ready: number;
+	    upToDate: number;
+	    available: number;
+	    nodeSelector: string;
 	    status: string;
 	    createdAtUnix: number;
 	    age: string;
@@ -428,6 +438,12 @@ export namespace kube {
 	        this.namespace = source["namespace"];
 	        this.pods = source["pods"];
 	        this.replicas = source["replicas"];
+	        this.desired = source["desired"];
+	        this.current = source["current"];
+	        this.ready = source["ready"];
+	        this.upToDate = source["upToDate"];
+	        this.available = source["available"];
+	        this.nodeSelector = source["nodeSelector"];
 	        this.status = source["status"];
 	        this.createdAtUnix = source["createdAtUnix"];
 	        this.age = source["age"];

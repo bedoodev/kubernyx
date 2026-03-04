@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PodResource, PodDetail, PodDetailContainer, PodLogLine } from '../../../../shared/types'
-import { ExecPodCommand, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
+import { DeletePodResource, ExecPodCommand, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
 import { getAgeLabel, parsePhase, toPercent } from '../../../../shared/utils/formatting'
 import { toPodExecResult, toPodLogLines } from '../../../../shared/utils/normalization'
 import YamlEditor from '../../../../shared/components/YamlEditor'
@@ -94,6 +94,57 @@ function formatCommandDisplay(parts: string[]): string {
 
   const normalized = single.replace(/\s+/g, ' ').trim()
   return normalized.replace(/\s+(--[^\s]+)/g, '\n$1')
+}
+
+function tryFormatLongJSONValue(rawValue: string): string | null {
+  const trimmed = rawValue.trim()
+  if (trimmed.length < 72) {
+    return null
+  }
+
+  const looksLikeJSON = (
+    (trimmed.startsWith('{') && trimmed.endsWith('}'))
+    || (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  )
+  if (!looksLikeJSON) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return null
+  }
+}
+
+function isLongMetadataValue(displayValue: string): boolean {
+  if (displayValue.length > 900) {
+    return true
+  }
+  return displayValue.split('\n').length > 14
+}
+
+function renderMetadataValue(
+  value: string,
+  options?: {
+    prettyJson?: string | null
+    collapsed?: boolean
+  },
+) {
+  const safeValue = value.trim() ? value : '-'
+  const resolvedPrettyJson = options?.prettyJson ?? tryFormatLongJSONValue(safeValue)
+  const collapsedClass = options?.collapsed ? ' is-collapsed' : ''
+  if (!resolvedPrettyJson) {
+    return <span className={`pods-meta-text-value${collapsedClass}`}>{safeValue}</span>
+  }
+
+  return (
+    <code className={`pods-meta-json-value${collapsedClass}`}>{resolvedPrettyJson}</code>
+  )
 }
 
 function syncToggleState(current: Record<string, boolean>, keys: string[], defaultValue: boolean): Record<string, boolean> {
@@ -252,6 +303,7 @@ export default function PodDetailPanel({
     labels: false,
     annotations: false,
   })
+  const [expandedMetadataValues, setExpandedMetadataValues] = useState<Record<string, boolean>>({})
   const [volumeTypeOpenByType, setVolumeTypeOpenByType] = useState<Record<string, boolean>>({})
   const [initExpandedByKey, setInitExpandedByKey] = useState<Record<string, boolean>>({})
   const [initEnvOpenByKey, setInitEnvOpenByKey] = useState<Record<string, boolean>>({})
@@ -275,6 +327,8 @@ export default function PodDetailPanel({
   const [logsClearedCount, setLogsClearedCount] = useState(0)
   const [logsNearBottom, setLogsNearBottom] = useState(true)
   const [logsActionError, setLogsActionError] = useState<string | null>(null)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [initLogsModal, setInitLogsModal] = useState<{ key: string; containerName: string } | null>(null)
   const [initLogsDataByKey, setInitLogsDataByKey] = useState<Record<string, PodLogLine[]>>({})
   const [initLogsLoadingByKey, setInitLogsLoadingByKey] = useState<Record<string, boolean>>({})
@@ -439,6 +493,8 @@ export default function PodDetailPanel({
     setLogsClearedCount(0)
     setLogsNearBottom(true)
     setLogsActionError(null)
+    setDeletePending(false)
+    setDeleteError(null)
     setInitLogsModal(null)
     setInitLogsDataByKey({})
     setInitLogsLoadingByKey({})
@@ -446,6 +502,7 @@ export default function PodDetailPanel({
     setVolumeTypeOpenByType({})
     setShellContainerOpen(false)
     setShellSessions({})
+    setExpandedMetadataValues({})
   }, [selectedPod.namespace, selectedPod.name])
 
   const selectedContainer = useMemo(() => {
@@ -707,10 +764,41 @@ export default function PodDetailPanel({
     }
   }
 
+  const deletePod = () => {
+    if (deletePending) {
+      return
+    }
+    const confirmed = window.confirm(`Delete pod "${selectedPod.name}" in namespace "${selectedPod.namespace}"?`)
+    if (!confirmed) {
+      return
+    }
+
+    setDeletePending(true)
+    setDeleteError(null)
+    void DeletePodResource(
+      clusterFilename,
+      selectedPod.namespace,
+      selectedPod.name,
+    ).then(() => {
+      onClose()
+    }).catch((errorValue: unknown) => {
+      setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setDeletePending(false)
+    })
+  }
+
   const toggleMetadataSection = (section: MetadataSectionKey) => {
     setMetadataOpenSections(current => ({
       ...current,
       [section]: !current[section],
+    }))
+  }
+
+  const toggleMetadataValueExpand = (key: string) => {
+    setExpandedMetadataValues(current => ({
+      ...current,
+      [key]: !current[key],
     }))
   }
 
@@ -1943,6 +2031,22 @@ export default function PodDetailPanel({
           <p>{selectedPod.namespace}</p>
         </div>
         <div className="pods-detail-actions">
+          <button
+            type="button"
+            className="pods-detail-icon-btn danger"
+            onClick={deletePod}
+            title="Delete pod"
+            aria-label="Delete pod"
+            disabled={deletePending}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+              <path d="M6 6l1 14a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 6" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </button>
           {showMaximizeButton && (
             <button
               type="button"
@@ -1960,7 +2064,7 @@ export default function PodDetailPanel({
           )}
           <button
             type="button"
-            className="pods-detail-icon-btn danger"
+            className="pods-detail-icon-btn"
             onClick={onClose}
             title="Close panel"
             aria-label="Close panel"
@@ -1987,6 +2091,9 @@ export default function PodDetailPanel({
       </nav>
 
       <div className={`pods-detail-body ${activeDetailsTab === 'manifest' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : activeDetailsTab === 'shell' ? 'shell-mode' : ''}`}>
+        {deleteError && (
+          <div className="pods-detail-alert error">{deleteError}</div>
+        )}
         {(!['overview', 'metadata', 'init-containers', 'containers', 'logs', 'shell', 'usages', 'manifest'].includes(activeDetailsTab)) ? (
           <>
             <h5>{detailTabLabel}</h5>
@@ -2020,12 +2127,32 @@ export default function PodDetailPanel({
                 <p className="pods-meta-empty">No labels</p>
               ) : (
                 <div className="pods-meta-list">
-                  {metadataLabels.map(([key, value]) => (
-                    <div key={key} className="pods-meta-item">
-                      <span className="pods-meta-key">{key}:</span>
-                      <span>{value}</span>
-                    </div>
-                  ))}
+                  {metadataLabels.map(([key, value]) => {
+                    const prettyJson = tryFormatLongJSONValue(value)
+                    const safeValue = value.trim() ? value : '-'
+                    const displayValue = prettyJson ?? safeValue
+                    const isLong = isLongMetadataValue(displayValue)
+                    const expandKey = `labels:${key}`
+                    const expanded = expandedMetadataValues[expandKey] ?? false
+                    const collapsed = isLong && !expanded
+                    return (
+                      <div key={key} className={`pods-meta-item ${prettyJson ? 'is-json' : ''}`}>
+                        <span className="pods-meta-key">{key}:</span>
+                        <div className={`pods-meta-value-block ${collapsed ? 'is-collapsed' : ''}`}>
+                          {renderMetadataValue(value, { prettyJson, collapsed })}
+                          {isLong && (
+                            <button
+                              type="button"
+                              className="pods-meta-expand-btn"
+                              onClick={() => toggleMetadataValueExpand(expandKey)}
+                            >
+                              {expanded ? 'Show less' : 'Show more'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </section>
@@ -2050,12 +2177,32 @@ export default function PodDetailPanel({
                 <p className="pods-meta-empty">No annotations</p>
               ) : (
                 <div className="pods-meta-list">
-                  {metadataAnnotations.map(([key, value]) => (
-                    <div key={key} className="pods-meta-item">
-                      <span className="pods-meta-key">{key}:</span>
-                      <span>{value}</span>
-                    </div>
-                  ))}
+                  {metadataAnnotations.map(([key, value]) => {
+                    const prettyJson = tryFormatLongJSONValue(value)
+                    const safeValue = value.trim() ? value : '-'
+                    const displayValue = prettyJson ?? safeValue
+                    const isLong = isLongMetadataValue(displayValue)
+                    const expandKey = `annotations:${key}`
+                    const expanded = expandedMetadataValues[expandKey] ?? false
+                    const collapsed = isLong && !expanded
+                    return (
+                      <div key={key} className={`pods-meta-item ${prettyJson ? 'is-json' : ''}`}>
+                        <span className="pods-meta-key">{key}:</span>
+                        <div className={`pods-meta-value-block ${collapsed ? 'is-collapsed' : ''}`}>
+                          {renderMetadataValue(value, { prettyJson, collapsed })}
+                          {isLong && (
+                            <button
+                              type="button"
+                              className="pods-meta-expand-btn"
+                              onClick={() => toggleMetadataValueExpand(expandKey)}
+                            >
+                              {expanded ? 'Show less' : 'Show more'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </section>

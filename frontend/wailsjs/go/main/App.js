@@ -14,6 +14,18 @@ export function DeleteCluster(arg1) {
   return window['go']['main']['App']['DeleteCluster'](arg1);
 }
 
+export function DeleteDeploymentResource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteDeploymentResource'](arg1, arg2, arg3);
+}
+
+export function DeletePodResource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeletePodResource'](arg1, arg2, arg3);
+}
+
+export function DeleteWorkloadResource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['DeleteWorkloadResource'](arg1, arg2, arg3, arg4);
+}
+
 export function ExecPodCommand(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['ExecPodCommand'](arg1, arg2, arg3, arg4, arg5);
 }

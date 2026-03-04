@@ -48,6 +48,12 @@ func (c *Client) GetDeploymentResources(ctx context.Context, namespaces []string
 				Namespace:     deployment.Namespace,
 				Pods:          fmt.Sprintf("%d/%d", deployment.Status.ReadyReplicas, replicas),
 				Replicas:      replicas,
+				Desired:       replicas,
+				Current:       deployment.Status.Replicas,
+				Ready:         deployment.Status.ReadyReplicas,
+				UpToDate:      deployment.Status.UpdatedReplicas,
+				Available:     deployment.Status.AvailableReplicas,
+				NodeSelector:  formatNodeSelectorMap(deployment.Spec.Template.Spec.NodeSelector),
 				Status:        deploymentStatusLabel(&deployment),
 				CreatedAtUnix: deployment.CreationTimestamp.Time.Unix(),
 				Age:           formatAge(time.Since(deployment.CreationTimestamp.Time)),
@@ -205,6 +211,7 @@ func (c *Client) GetDeploymentDetail(ctx context.Context, namespace string, name
 		Namespace:       deployment.Namespace,
 		Status:          deploymentStatusLabel(deployment),
 		Replicas:        replicas,
+		Current:         deployment.Status.Replicas,
 		Ready:           deployment.Status.ReadyReplicas,
 		Updated:         deployment.Status.UpdatedReplicas,
 		Available:       deployment.Status.AvailableReplicas,
@@ -216,6 +223,7 @@ func (c *Client) GetDeploymentDetail(ctx context.Context, namespace string, name
 		Labels:          labels,
 		Annotations:     annotations,
 		Selector:        selector,
+		NodeSelector:    podTemplateNodeSelectorMap(deployment.Spec.Template),
 		StrategyType:    strategyType,
 		Conditions:      conditions,
 		Tolerations:     collectDeploymentTolerations(deployment),
@@ -228,6 +236,20 @@ func (c *Client) GetDeploymentDetail(ctx context.Context, namespace string, name
 		Manifest:        manifest,
 		ScaleSupported:  true,
 	}, nil
+}
+
+func (c *Client) DeleteDeployment(ctx context.Context, namespace string, name string) error {
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("deployment name is required")
+	}
+
+	if err := c.clientset.AppsV1().Deployments(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+		return fmt.Errorf("failed to delete deployment: %w", err)
+	}
+	return nil
 }
 
 func (c *Client) GetDeploymentLogs(ctx context.Context, namespace string, name string, tailLines int64) ([]DeploymentLogLine, error) {

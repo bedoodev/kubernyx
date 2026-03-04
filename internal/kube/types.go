@@ -81,6 +81,12 @@ type DeploymentResource struct {
 	Namespace     string            `json:"namespace"`
 	Pods          string            `json:"pods"`
 	Replicas      int32             `json:"replicas"`
+	Desired       int32             `json:"desired"`
+	Current       int32             `json:"current"`
+	Ready         int32             `json:"ready"`
+	UpToDate      int32             `json:"upToDate"`
+	Available     int32             `json:"available"`
+	NodeSelector  string            `json:"nodeSelector"`
 	Status        string            `json:"status"`
 	CreatedAtUnix int64             `json:"createdAtUnix"`
 	Age           string            `json:"age"`
@@ -116,6 +122,7 @@ type DeploymentDetail struct {
 	Namespace       string                     `json:"namespace"`
 	Status          string                     `json:"status"`
 	Replicas        int32                      `json:"replicas"`
+	Current         int32                      `json:"current"`
 	Ready           int32                      `json:"ready"`
 	Updated         int32                      `json:"updated"`
 	Available       int32                      `json:"available"`
@@ -127,6 +134,7 @@ type DeploymentDetail struct {
 	Labels          map[string]string          `json:"labels"`
 	Annotations     map[string]string          `json:"annotations"`
 	Selector        map[string]string          `json:"selector"`
+	NodeSelector    map[string]string          `json:"nodeSelector"`
 	StrategyType    string                     `json:"strategyType"`
 	Conditions      []PodDetailCondition       `json:"conditions"`
 	Tolerations     []string                   `json:"tolerations"`

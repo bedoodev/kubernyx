@@ -9,6 +9,12 @@ export function ConnectCluster(arg1:string,arg2:string):Promise<kube.ClusterOver
 
 export function DeleteCluster(arg1:string):Promise<void>;
 
+export function DeleteDeploymentResource(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function DeletePodResource(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function DeleteWorkloadResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
 export function ExecPodCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<kube.PodExecResult>;
 
 export function GetBasePath():Promise<string>;

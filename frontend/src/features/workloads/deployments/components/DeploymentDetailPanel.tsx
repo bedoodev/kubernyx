@@ -1,18 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DeploymentDetail, DeploymentLogLine, DeploymentResource } from '../../../../shared/types'
-import { ScaleDeployment, ScaleWorkload, UpdateDeploymentManifest, UpdateWorkloadManifest } from '../../../../shared/api'
+import {
+  DeleteDeploymentResource,
+  DeleteWorkloadResource,
+  ScaleDeployment,
+  ScaleWorkload,
+  UpdateDeploymentManifest,
+  UpdateWorkloadManifest,
+} from '../../../../shared/api'
 import { parsePhase } from '../../../../shared/utils/formatting'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import type { NonPodWorkloadTabId } from '../../workloadKinds'
 import { toWorkloadAPIKind, workloadSingularLabel } from '../../workloadKinds'
 import '../../pods/PodsTable.css'
 
-export type DeploymentDetailsTabId = 'overview' | 'metadata' | 'containers' | 'yaml' | 'scale' | 'logs'
+export type DeploymentDetailsTabId = 'overview' | 'metadata' | 'containers' | 'scale' | 'logs' | 'yaml' 
 
 type MetadataSectionKey =
   | 'labels'
   | 'annotations'
   | 'selector'
+  | 'nodeSelector'
   | 'strategy'
   | 'conditions'
   | 'tolerations'
@@ -27,9 +35,17 @@ const DETAIL_TABS_BASE: Array<{ id: DeploymentDetailsTabId; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'metadata', label: 'Metadata' },
   { id: 'containers', label: 'Containers' },
-  { id: 'yaml', label: 'YAML' },
-  { id: 'scale', label: 'Scale' },
   { id: 'logs', label: 'Logs' },
+  { id: 'scale', label: 'Scale' },
+  { id: 'yaml', label: 'YAML' },
+
+]
+
+const DAEMON_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'yaml', label: 'YAML' },
 ]
 
 const LOGS_ALL_PODS = '__all_pods__'
@@ -132,6 +148,71 @@ function formatStatusOption(option: LogsStatusFilter): string {
   return LOGS_STATUS_OPTIONS.find(item => item.value === option)?.label ?? 'All Status'
 }
 
+function formatMapAsInline(mapValue: Record<string, string> | undefined, fallback = '-'): string {
+  if (!mapValue) {
+    return fallback
+  }
+  const entries = Object.entries(mapValue)
+  if (entries.length === 0) {
+    return fallback
+  }
+  return entries
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ')
+}
+
+function tryFormatLongJSONValue(rawValue: string): string | null {
+  const trimmed = rawValue.trim()
+  if (trimmed.length < 72) {
+    return null
+  }
+
+  const looksLikeJSON = (
+    (trimmed.startsWith('{') && trimmed.endsWith('}'))
+    || (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  )
+  if (!looksLikeJSON) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    return null
+  }
+}
+
+function isLongMetadataValue(displayValue: string): boolean {
+  if (displayValue.length > 900) {
+    return true
+  }
+  return displayValue.split('\n').length > 14
+}
+
+function renderMetadataValue(
+  value: string,
+  options?: {
+    prettyJson?: string | null
+    collapsed?: boolean
+  },
+) {
+  const safeValue = value.trim() ? value : '-'
+  const resolvedPrettyJson = options?.prettyJson ?? tryFormatLongJSONValue(safeValue)
+  const collapsedClass = options?.collapsed ? ' is-collapsed' : ''
+  if (!resolvedPrettyJson) {
+    return <span className={`pods-meta-text-value${collapsedClass}`}>{safeValue}</span>
+  }
+
+  return (
+    <code className={`pods-meta-json-value${collapsedClass}`}>{resolvedPrettyJson}</code>
+  )
+}
+
 export default function DeploymentDetailPanel({
   clusterFilename,
   workloadTab = 'deployments',
@@ -154,12 +235,14 @@ export default function DeploymentDetailPanel({
     labels: false,
     annotations: false,
     selector: false,
+    nodeSelector: false,
     strategy: false,
     conditions: false,
     tolerations: false,
     nodeAffinities: false,
     podAntiAffinities: false,
   })
+  const [expandedMetadataValues, setExpandedMetadataValues] = useState<Record<string, boolean>>({})
   const [containerSelectOpen, setContainerSelectOpen] = useState(false)
   const [selectedContainerName, setSelectedContainerName] = useState('')
   const [containerSectionOpen, setContainerSectionOpen] = useState<Record<ContainerSectionKey, boolean>>({
@@ -174,6 +257,8 @@ export default function DeploymentDetailPanel({
   const [yamlSaving, setYamlSaving] = useState(false)
   const [yamlError, setYamlError] = useState<string | null>(null)
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [scaleValue, setScaleValue] = useState(String(selectedDeployment.replicas ?? 0))
   const [scaleSaving, setScaleSaving] = useState(false)
@@ -196,17 +281,22 @@ export default function DeploymentDetailPanel({
 
   const deploymentKey = `${workloadTab}:${selectedDeployment.namespace}/${selectedDeployment.name}`
   const workloadLabel = workloadSingularLabel(workloadTab)
+  const isDaemonSet = workloadTab === 'daemon-sets'
   const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments'))
   const detailTabs = useMemo(
-    () => DETAIL_TABS_BASE.filter(tab => scaleSupported || tab.id !== 'scale'),
-    [scaleSupported],
+    () => {
+      const base = isDaemonSet ? DAEMON_SET_DETAIL_TABS : DETAIL_TABS_BASE
+      return base.filter(tab => scaleSupported || tab.id !== 'scale')
+    },
+    [isDaemonSet, scaleSupported],
   )
 
   useEffect(() => {
-    if (!scaleSupported && activeDetailsTab === 'scale') {
+    const supportedTabIds = new Set(detailTabs.map(tab => tab.id))
+    if (!supportedTabIds.has(activeDetailsTab)) {
       onDetailsTabChange('overview')
     }
-  }, [scaleSupported, activeDetailsTab, onDetailsTabChange])
+  }, [activeDetailsTab, detailTabs, onDetailsTabChange])
 
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -232,6 +322,8 @@ export default function DeploymentDetailPanel({
     setYamlError(null)
     setYamlSuccess(null)
     setYamlSaving(false)
+    setDeletePending(false)
+    setDeleteError(null)
     setScaleError(null)
     setScaleSaving(false)
     setLogsPodFilter(LOGS_ALL_PODS)
@@ -241,6 +333,7 @@ export default function DeploymentDetailPanel({
     setLogsPodFilterOpen(false)
     setLogsContainerFilterOpen(false)
     setLogsStatusFilterOpen(false)
+    setExpandedMetadataValues({})
   }, [deploymentKey])
 
   useEffect(() => {
@@ -349,6 +442,7 @@ export default function DeploymentDetailPanel({
   const metadataLabels = Object.entries(deploymentDetail?.labels ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataAnnotations = Object.entries(deploymentDetail?.annotations ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataSelector = Object.entries(deploymentDetail?.selector ?? {}).sort(([left], [right]) => left.localeCompare(right))
+  const metadataNodeSelector = Object.entries(deploymentDetail?.nodeSelector ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataConditions = deploymentDetail?.conditions ?? []
   const metadataTolerations = deploymentDetail?.tolerations ?? []
   const metadataNodeAffinities = deploymentDetail?.nodeAffinities ?? []
@@ -356,11 +450,16 @@ export default function DeploymentDetailPanel({
 
   const overviewStatus = deploymentDetail?.status ?? selectedDeployment.status ?? '-'
   const overviewAge = deploymentDetail?.age ?? selectedDeployment.age ?? '-'
-  const overviewReplicas = deploymentDetail?.replicas ?? selectedDeployment.replicas ?? 0
-  const overviewReady = deploymentDetail?.ready ?? 0
-  const overviewUpdated = deploymentDetail?.updated ?? 0
-  const overviewAvailable = deploymentDetail?.available ?? 0
+  const overviewReplicas = deploymentDetail?.replicas ?? selectedDeployment.desired ?? selectedDeployment.replicas ?? 0
+  const overviewCurrent = deploymentDetail?.current ?? selectedDeployment.current ?? 0
+  const overviewReady = deploymentDetail?.ready ?? selectedDeployment.ready ?? 0
+  const overviewUpdated = deploymentDetail?.updated ?? selectedDeployment.upToDate ?? 0
+  const overviewAvailable = deploymentDetail?.available ?? selectedDeployment.available ?? 0
   const overviewUnavailable = deploymentDetail?.unavailable ?? 0
+  const overviewNodeSelector = deploymentDetail?.nodeSelector
+  const overviewNodeSelectorText = (selectedDeployment.nodeSelector && selectedDeployment.nodeSelector !== '-')
+    ? selectedDeployment.nodeSelector
+    : formatMapAsInline(overviewNodeSelector, '-')
   const overviewCreated = deploymentDetail?.created ?? '-'
   const overviewUID = deploymentDetail?.uid ?? '-'
   const overviewRevisions = deploymentDetail?.revisions ?? []
@@ -371,6 +470,13 @@ export default function DeploymentDetailPanel({
     setMetadataOpenSections(current => ({
       ...current,
       [section]: !current[section],
+    }))
+  }
+
+  const toggleMetadataValueExpand = (key: string) => {
+    setExpandedMetadataValues(current => ({
+      ...current,
+      [key]: !current[key],
     }))
   }
 
@@ -447,6 +553,39 @@ export default function DeploymentDetailPanel({
     })
   }
 
+  const deleteWorkload = () => {
+    if (deletePending) {
+      return
+    }
+    const confirmed = window.confirm(`Delete ${workloadLabel} "${selectedDeployment.name}" in namespace "${selectedDeployment.namespace}"?`)
+    if (!confirmed) {
+      return
+    }
+
+    setDeletePending(true)
+    setDeleteError(null)
+    const operation = workloadTab === 'deployments'
+      ? DeleteDeploymentResource(
+        clusterFilename,
+        selectedDeployment.namespace,
+        selectedDeployment.name,
+      )
+      : DeleteWorkloadResource(
+        clusterFilename,
+        toWorkloadAPIKind(workloadTab),
+        selectedDeployment.namespace,
+        selectedDeployment.name,
+      )
+
+    void operation.then(() => {
+      onClose()
+    }).catch((errorValue: unknown) => {
+      setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setDeletePending(false)
+    })
+  }
+
   const renderMetadataKeyValueSection = (
     section: MetadataSectionKey,
     title: string,
@@ -471,12 +610,32 @@ export default function DeploymentDetailPanel({
         <p className="pods-meta-empty">No {title.toLowerCase()}</p>
       ) : (
         <div className="pods-meta-list">
-          {items.map(([key, value]) => (
-            <div key={`${key}-${value}`} className="pods-meta-item">
-              <span className="pods-meta-key">{key}:</span>
-              <span>{value}</span>
-            </div>
-          ))}
+          {items.map(([key, value]) => {
+            const prettyJson = tryFormatLongJSONValue(value)
+            const safeValue = value.trim() ? value : '-'
+            const displayValue = prettyJson ?? safeValue
+            const isLong = isLongMetadataValue(displayValue)
+            const expandKey = `${section}:${key}`
+            const expanded = expandedMetadataValues[expandKey] ?? false
+            const collapsed = isLong && !expanded
+            return (
+              <div key={`${key}-${value}`} className={`pods-meta-item ${prettyJson ? 'is-json' : ''}`}>
+                <span className="pods-meta-key">{key}:</span>
+                <div className={`pods-meta-value-block ${collapsed ? 'is-collapsed' : ''}`}>
+                  {renderMetadataValue(value, { prettyJson, collapsed })}
+                  {isLong && (
+                    <button
+                      type="button"
+                      className="pods-meta-expand-btn"
+                      onClick={() => toggleMetadataValueExpand(expandKey)}
+                    >
+                      {expanded ? 'Show less' : 'Show more'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </section>
@@ -749,6 +908,22 @@ export default function DeploymentDetailPanel({
           <p>{selectedDeployment.namespace}</p>
         </div>
         <div className="pods-detail-actions">
+          <button
+            type="button"
+            className="pods-detail-icon-btn danger"
+            onClick={deleteWorkload}
+            title={`Delete ${workloadLabel}`}
+            aria-label={`Delete ${workloadLabel}`}
+            disabled={deletePending}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+              <path d="M6 6l1 14a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 6" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
+          </button>
           {showMaximizeButton && (
             <button
               type="button"
@@ -766,7 +941,7 @@ export default function DeploymentDetailPanel({
           )}
           <button
             type="button"
-            className="pods-detail-icon-btn danger"
+            className="pods-detail-icon-btn"
             onClick={onClose}
             title="Close panel"
             aria-label="Close panel"
@@ -793,6 +968,9 @@ export default function DeploymentDetailPanel({
       </nav>
 
       <div className={`pods-detail-body ${activeDetailsTab === 'yaml' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : ''}`}>
+        {deleteError && (
+          <div className="pods-detail-alert error">{deleteError}</div>
+        )}
         {(deploymentDetailError && activeDetailsTab !== 'logs') ? (
           <div className="pods-detail-alert error">{deploymentDetailError}</div>
         ) : activeDetailsTab === 'metadata' ? (
@@ -803,6 +981,7 @@ export default function DeploymentDetailPanel({
             {renderMetadataKeyValueSection('labels', 'Labels', metadataLabels)}
             {renderMetadataKeyValueSection('annotations', 'Annotations', metadataAnnotations)}
             {renderMetadataKeyValueSection('selector', 'Selector', metadataSelector)}
+            {renderMetadataKeyValueSection('nodeSelector', 'Node Selector', metadataNodeSelector)}
             {renderMetadataListSection('strategy', 'Strategy Type', [deploymentDetail?.strategyType ?? '-'])}
             {renderMetadataListSection(
               'conditions',
@@ -1078,25 +1257,39 @@ export default function DeploymentDetailPanel({
                 </strong>
               </div>
               <div className="pods-overview-card">
-                <span>Replicas</span>
+                <span>{isDaemonSet ? 'Desired' : 'Replicas'}</span>
                 <strong>{overviewReplicas}</strong>
               </div>
+              {isDaemonSet && (
+                <div className="pods-overview-card">
+                  <span>Current</span>
+                  <strong>{overviewCurrent}</strong>
+                </div>
+              )}
               <div className="pods-overview-card">
                 <span>Ready</span>
                 <strong>{overviewReady}</strong>
               </div>
               <div className="pods-overview-card">
-                <span>Updated</span>
+                <span>{isDaemonSet ? 'Up-to-date' : 'Updated'}</span>
                 <strong>{overviewUpdated}</strong>
               </div>
               <div className="pods-overview-card">
                 <span>Available</span>
                 <strong>{overviewAvailable}</strong>
               </div>
-              <div className="pods-overview-card">
-                <span>Unavailable</span>
-                <strong>{overviewUnavailable}</strong>
-              </div>
+              {!isDaemonSet && (
+                <div className="pods-overview-card">
+                  <span>Unavailable</span>
+                  <strong>{overviewUnavailable}</strong>
+                </div>
+              )}
+              {isDaemonSet && (
+                <div className="pods-overview-card is-full">
+                  <span>Node Selector</span>
+                  <strong>{overviewNodeSelectorText}</strong>
+                </div>
+              )}
               <div className="pods-overview-card">
                 <span>Age</span>
                 <strong>{overviewAge}</strong>
@@ -1111,39 +1304,41 @@ export default function DeploymentDetailPanel({
               </div>
             </div>
 
-            <section className="pods-detail-section">
-              <h5>{workloadTab === 'deployments' ? 'Deploy Revisions' : 'Revisions'}</h5>
-              <div className="pods-detail-table-wrap">
-                <table className="pods-detail-table">
-                  <thead>
-                    <tr>
-                      <th>Revision</th>
-                      <th>ReplicaSet</th>
-                      <th>Replicas</th>
-                      <th>Ready</th>
-                      <th>Age</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overviewRevisions.length === 0 ? (
+            {!isDaemonSet && (
+              <section className="pods-detail-section">
+                <h5>{workloadTab === 'deployments' ? 'Deploy Revisions' : 'Revisions'}</h5>
+                <div className="pods-detail-table-wrap">
+                  <table className="pods-detail-table">
+                    <thead>
                       <tr>
-                        <td colSpan={5} className="pods-detail-empty">No revisions</td>
+                        <th>Revision</th>
+                        <th>ReplicaSet</th>
+                        <th>Replicas</th>
+                        <th>Ready</th>
+                        <th>Age</th>
                       </tr>
-                    ) : (
-                      overviewRevisions.map(revision => (
-                        <tr key={`${revision.replicaSet}-${revision.revision}`}>
-                          <td className="pods-detail-value-cell">{revision.revision}</td>
-                          <td className="pods-detail-value-cell">{revision.replicaSet}</td>
-                          <td className="pods-detail-value-cell">{revision.replicas}</td>
-                          <td className="pods-detail-value-cell">{revision.ready}</td>
-                          <td className="pods-detail-value-cell">{revision.age}</td>
+                    </thead>
+                    <tbody>
+                      {overviewRevisions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="pods-detail-empty">No revisions</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+                      ) : (
+                        overviewRevisions.map(revision => (
+                          <tr key={`${revision.replicaSet}-${revision.revision}`}>
+                            <td className="pods-detail-value-cell">{revision.revision}</td>
+                            <td className="pods-detail-value-cell">{revision.replicaSet}</td>
+                            <td className="pods-detail-value-cell">{revision.replicas}</td>
+                            <td className="pods-detail-value-cell">{revision.ready}</td>
+                            <td className="pods-detail-value-cell">{revision.age}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <section className="pods-detail-section">
               <h5>Pods</h5>

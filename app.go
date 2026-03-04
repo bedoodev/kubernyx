@@ -234,6 +234,21 @@ func (a *App) ScaleDeployment(filename string, namespace string, deploymentName 
 	return client.ScaleDeployment(a.ctx, namespace, deploymentName, replicas)
 }
 
+// DeleteDeploymentResource deletes a deployment by namespace/name.
+func (a *App) DeleteDeploymentResource(filename string, namespace string, deploymentName string) error {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.DeleteDeployment(a.ctx, namespace, deploymentName)
+}
+
 // GetWorkloadResources returns workload resources for the given kind and namespaces.
 func (a *App) GetWorkloadResources(filename string, kind string, namespaces []string) ([]kube.DeploymentResource, error) {
 	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
@@ -307,6 +322,36 @@ func (a *App) ScaleWorkload(filename string, kind string, namespace string, name
 	}
 
 	return client.ScaleWorkload(a.ctx, kind, namespace, name, replicas)
+}
+
+// DeleteWorkloadResource deletes a workload controller resource by kind/namespace/name.
+func (a *App) DeleteWorkloadResource(filename string, kind string, namespace string, name string) error {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.DeleteWorkload(a.ctx, kind, namespace, name)
+}
+
+// DeletePodResource deletes a pod by namespace/name.
+func (a *App) DeletePodResource(filename string, namespace string, podName string) error {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.DeletePod(a.ctx, namespace, podName)
 }
 
 // GetPodLogs returns pod log lines for one or all containers.
