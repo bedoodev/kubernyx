@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { WORKLOAD_TAB_OPTIONS } from '../../shared/types'
-import type { ClusterInfo, ClusterSection, WorkloadTabId } from '../../shared/types'
+import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS } from '../../shared/types'
+import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
 import EditClusterModal from './components/EditClusterModal'
 import './Sidebar.css'
@@ -11,9 +11,10 @@ interface Props {
   activeCluster: ClusterInfo | null
   activeSection: ClusterSection | null
   activeWorkloadTab: WorkloadTabId | null
+  activeConfigTab: ConfigTabId | null
   showSettings: boolean
   onToggleCollapse: () => void
-  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId) => void
+  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId) => void
   onAdd: (name: string, content: string) => Promise<void>
   onRename: (oldFilename: string, newName: string) => Promise<void>
   onDelete: (filename: string) => Promise<void>
@@ -27,6 +28,8 @@ type NavItem =
   | { type: 'overview'; cluster: ClusterInfo }
   | { type: 'workloads-toggle'; cluster: ClusterInfo }
   | { type: 'workload-tab'; cluster: ClusterInfo; tabId: WorkloadTabId }
+  | { type: 'config-toggle'; cluster: ClusterInfo }
+  | { type: 'config-tab'; cluster: ClusterInfo; tabId: ConfigTabId }
 
 const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   clusters,
@@ -34,6 +37,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   activeCluster,
   activeSection,
   activeWorkloadTab,
+  activeConfigTab,
   showSettings,
   onToggleCollapse,
   onSelect,
@@ -50,11 +54,13 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   const [contextMenu, setContextMenu] = useState<{ filename: string; x: number; y: number } | null>(null)
   const [expandedClusters, setExpandedClusters] = useState<string[]>([])
   const [expandedWorkloads, setExpandedWorkloads] = useState<string[]>([])
+  const [expandedConfigs, setExpandedConfigs] = useState<string[]>([])
 
   useEffect(() => {
     const valid = new Set(clusters.map(cluster => cluster.filename))
     setExpandedClusters(current => current.filter(filename => valid.has(filename)))
     setExpandedWorkloads(current => current.filter(filename => valid.has(filename)))
+    setExpandedConfigs(current => current.filter(filename => valid.has(filename)))
   }, [clusters])
 
   useEffect(() => {
@@ -68,6 +74,12 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
     ))
     if (activeSection === 'workloads') {
       setExpandedWorkloads(current => (
+        current.includes(activeCluster.filename)
+          ? current
+          : [...current, activeCluster.filename]
+      ))
+    } else if (activeSection === 'config') {
+      setExpandedConfigs(current => (
         current.includes(activeCluster.filename)
           ? current
           : [...current, activeCluster.filename]
@@ -109,6 +121,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
     ))
   }
 
+  const toggleConfigs = (filename: string) => {
+    setExpandedConfigs(current => (
+      current.includes(filename)
+        ? current.filter(name => name !== filename)
+        : [...current, filename]
+    ))
+  }
+
   const [focusedNavIndex, setFocusedNavIndex] = useState(-1)
   const clusterListRef = useRef<HTMLDivElement | null>(null)
 
@@ -124,10 +144,16 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             items.push({ type: 'workload-tab', cluster: c, tabId: tab.id })
           }
         }
+        items.push({ type: 'config-toggle', cluster: c })
+        if (expandedConfigs.includes(c.filename)) {
+          for (const tab of CONFIG_TAB_OPTIONS) {
+            items.push({ type: 'config-tab', cluster: c, tabId: tab.id })
+          }
+        }
       }
     }
     return items
-  }, [filteredClusters, expandedClusters, expandedWorkloads])
+  }, [filteredClusters, expandedClusters, expandedWorkloads, expandedConfigs])
 
   const handleClusterListKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
@@ -157,6 +183,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleWorkloads(item.cluster.filename)
       } else if (item.type === 'workload-tab') {
         onSelect(item.cluster, 'workloads', item.tabId)
+      } else if (item.type === 'config-toggle') {
+        toggleConfigs(item.cluster.filename)
+      } else if (item.type === 'config-tab') {
+        onSelect(item.cluster, 'config', undefined, item.tabId)
       }
       return
     }
@@ -167,6 +197,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleCluster(item.cluster.filename)
       } else if (item.type === 'workloads-toggle' && !expandedWorkloads.includes(item.cluster.filename)) {
         toggleWorkloads(item.cluster.filename)
+      } else if (item.type === 'config-toggle' && !expandedConfigs.includes(item.cluster.filename)) {
+        toggleConfigs(item.cluster.filename)
       }
       return
     }
@@ -177,16 +209,21 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleCluster(item.cluster.filename)
       } else if (item.type === 'workloads-toggle' && expandedWorkloads.includes(item.cluster.filename)) {
         toggleWorkloads(item.cluster.filename)
+      } else if (item.type === 'config-toggle' && expandedConfigs.includes(item.cluster.filename)) {
+        toggleConfigs(item.cluster.filename)
       } else if (item.type === 'overview' || item.type === 'workloads-toggle') {
         const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
       } else if (item.type === 'workload-tab') {
         const parentIdx = navItems.findIndex(n => n.type === 'workloads-toggle' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      } else if (item.type === 'config-tab') {
+        const parentIdx = navItems.findIndex(n => n.type === 'config-toggle' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
       }
       return
     }
-  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, toggleCluster, toggleWorkloads, onSelect])
+  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, expandedConfigs, toggleCluster, toggleWorkloads, toggleConfigs, onSelect])
 
   useEffect(() => {
     if (focusedNavIndex < 0) return
@@ -250,6 +287,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                 const overviewActive = active && activeSection === 'overview'
                 const workloadsActive = active && activeSection === 'workloads'
                 const workloadsExpanded = expandedWorkloads.includes(c.filename)
+                const configActive = active && activeSection === 'config'
+                const configExpanded = expandedConfigs.includes(c.filename)
                 const clusterNavIdx = navIdx++
 
                 return (
@@ -331,6 +370,43 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                   onClick={e => {
                                     e.stopPropagation()
                                     onSelect(c, 'workloads', tab.id)
+                                  }}
+                                >
+                                  {tab.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item cluster-sub-toggle ${configActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                toggleConfigs(c.filename)
+                              }}
+                            >
+                              <span>Config</span>
+                              <svg className={`cluster-sub-chevron ${configExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path d="M7 5l6 5-6 5V5z" />
+                              </svg>
+                            </button>
+                          )})()}
+                          {configExpanded && (
+                          <div className="cluster-config-list">
+                            {CONFIG_TAB_OPTIONS.map(tab => {
+                              const idx = navIdx++
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  className={`cluster-config-item ${configActive && activeConfigTab === tab.id ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                                  data-nav-focused={focusedNavIndex === idx || undefined}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onSelect(c, 'config', undefined, tab.id)
                                   }}
                                 >
                                   {tab.label}

@@ -1,5 +1,6 @@
 export * from './cluster'
 export * from './overview'
 export * from './workloads'
+export * from './config'
 export * from './pods'
 export * from './deployments'

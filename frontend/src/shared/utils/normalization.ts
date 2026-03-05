@@ -12,6 +12,8 @@ import type {
   DeploymentResource,
   DeploymentDetail,
   DeploymentLogLine,
+  ConfigResource,
+  ConfigDetail,
 } from '../types'
 
 export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
@@ -487,4 +489,70 @@ export function toDeploymentLogLines(data: unknown): DeploymentLogLine[] {
       message: String(record.message ?? ''),
     }
   })
+}
+
+function toLabelsMap(value: unknown): Record<string, string> {
+  const record = (value ?? {}) as Record<string, unknown>
+  return Object.fromEntries(
+    Object.entries(record).map(([key, item]) => [key, String(item ?? '')]),
+  )
+}
+
+function parseKeysCount(record: Record<string, unknown>): number {
+  if (typeof record.replicas === 'number' && Number.isFinite(record.replicas)) {
+    return Math.max(0, Math.trunc(record.replicas))
+  }
+  const podsValue = String(record.pods ?? '').trim()
+  const parsed = Number.parseInt(podsValue, 10)
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+}
+
+export function toConfigResources(data: unknown): ConfigResource[] {
+  if (!Array.isArray(data)) {
+    return []
+  }
+
+  return data.map(item => {
+    const record = (item ?? {}) as Record<string, unknown>
+    return {
+      name: String(record.name ?? ''),
+      namespace: String(record.namespace ?? ''),
+      keys: parseKeysCount(record),
+      type: String(record.status ?? '-'),
+      createdAtUnix: Number(record.createdAtUnix ?? 0),
+      age: String(record.age ?? '-'),
+      labels: toLabelsMap(record.labels),
+      annotations: toLabelsMap(record.annotations),
+    }
+  })
+}
+
+export function toConfigDetail(data: unknown): ConfigDetail {
+  const record = (data ?? {}) as Record<string, unknown>
+  const events = Array.isArray(record.events)
+    ? record.events.map(item => {
+      const event = (item ?? {}) as Record<string, unknown>
+      return {
+        type: String(event.type ?? '-'),
+        reason: String(event.reason ?? '-'),
+        message: String(event.message ?? '-'),
+        count: Number(event.count ?? 0),
+        age: String(event.age ?? '-'),
+      }
+    })
+    : []
+
+  return {
+    name: String(record.name ?? ''),
+    namespace: String(record.namespace ?? ''),
+    type: String(record.status ?? '-'),
+    created: String(record.created ?? '-'),
+    uid: String(record.uid ?? '-'),
+    resourceVersion: String(record.resourceVersion ?? '-'),
+    labels: toLabelsMap(record.labels),
+    annotations: toLabelsMap(record.annotations),
+    data: toLabelsMap(record.selector),
+    events,
+    manifest: String(record.manifest ?? '-'),
+  }
 }

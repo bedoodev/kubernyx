@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { GetDeploymentResources, GetWorkloadResources } from '../../../../shared/api'
 import { toDeploymentResources } from '../../../../shared/utils/normalization'
 import type { DeploymentResource } from '../../../../shared/types'
 import type { NonPodWorkloadTabId } from '../../workloadKinds'
 import { toWorkloadAPIKind } from '../../workloadKinds'
+import { usePollingFetch } from '../../shared/usePollingFetch'
 
 interface UseDeploymentsResult {
   items: DeploymentResource[]
@@ -11,65 +12,31 @@ interface UseDeploymentsResult {
   error: string | null
 }
 
+const EMPTY: DeploymentResource[] = []
+
 export function useDeployments(
   clusterFilename: string,
   selectedNamespaces: string[],
   workloadTab: NonPodWorkloadTabId = 'deployments',
 ): UseDeploymentsResult {
-  const [items, setItems] = useState<DeploymentResource[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const namespacesKey = selectedNamespaces.join('\u0000')
 
-  useEffect(() => {
-    let active = true
-
-    if (selectedNamespaces.length === 0) {
-      setItems([])
-      setError(null)
-      setLoading(false)
-      return () => {
-        active = false
-      }
-    }
-
-    const load = async (initial: boolean) => {
-      if (initial) {
-        setLoading(true)
-      }
-      try {
-        const response = workloadTab === 'deployments'
-          ? await GetDeploymentResources(clusterFilename, selectedNamespaces)
-          : await GetWorkloadResources(clusterFilename, toWorkloadAPIKind(workloadTab), selectedNamespaces)
-        if (!active) {
-          return
-        }
-        setItems(toDeploymentResources(response))
-        setError(null)
-      } catch (errorValue: unknown) {
-        if (!active) {
-          return
-        }
-        setItems([])
-        setError(errorValue instanceof Error ? errorValue.message : String(errorValue))
-      } finally {
-        if (!active) {
-          return
-        }
-        setLoading(false)
-      }
-    }
-
-    void load(true)
-    const timer = window.setInterval(() => {
-      void load(false)
-    }, 2000)
-
-    return () => {
-      active = false
-      window.clearInterval(timer)
+  const fetcher = useMemo(() => {
+    if (selectedNamespaces.length === 0) return null
+    return async () => {
+      const response = workloadTab === 'deployments'
+        ? await GetDeploymentResources(clusterFilename, selectedNamespaces)
+        : await GetWorkloadResources(clusterFilename, toWorkloadAPIKind(workloadTab), selectedNamespaces)
+      return toDeploymentResources(response)
     }
   }, [clusterFilename, namespacesKey, workloadTab])
+
+  const { data: items, loading, error } = usePollingFetch(
+    fetcher,
+    EMPTY,
+    2000,
+    [fetcher],
+  )
 
   return { items, loading, error }
 }

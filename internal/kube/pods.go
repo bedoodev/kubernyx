@@ -9,7 +9,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 )
@@ -521,40 +520,7 @@ func containerEnvValue(env corev1.EnvVar) string {
 }
 
 func (c *Client) listPodEvents(ctx context.Context, pod *corev1.Pod) []PodDetailEvent {
-	fieldSelector := fields.Set{
-		"involvedObject.kind": "Pod",
-		"involvedObject.name": pod.Name,
-		"involvedObject.uid":  string(pod.UID),
-	}.AsSelector().String()
-
-	list, err := c.clientset.CoreV1().Events(pod.Namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: fieldSelector,
-	})
-	if err != nil {
-		return nil
-	}
-
-	sort.SliceStable(list.Items, func(i, j int) bool {
-		return podEventTimestamp(list.Items[i]).After(podEventTimestamp(list.Items[j]))
-	})
-
-	events := make([]PodDetailEvent, 0, len(list.Items))
-	for _, event := range list.Items {
-		age := "-"
-		if eventTime := podEventTimestamp(event); !eventTime.IsZero() {
-			age = formatAge(time.Since(eventTime))
-		}
-
-		events = append(events, PodDetailEvent{
-			Type:    stringOrDefault(event.Type, "-"),
-			Reason:  stringOrDefault(event.Reason, "-"),
-			Message: stringOrDefault(event.Message, "-"),
-			Count:   event.Count,
-			Age:     age,
-		})
-	}
-
-	return events
+	return objectEvents(ctx, c, pod.Namespace, "Pod", pod.Name, string(pod.UID))
 }
 
 func podEventTimestamp(event corev1.Event) time.Time {

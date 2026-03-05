@@ -45,6 +45,18 @@ func (a *App) shutdown(_ context.Context) {
 	a.StopPodLogsStream()
 }
 
+func (a *App) newTempClient(filename string) (*kube.Client, error) {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return nil, err
+	}
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect: %w", err)
+	}
+	return client, nil
+}
+
 // GetBasePath returns the configured base directory path.
 func (a *App) GetBasePath() string {
 	if a.cfg == nil {
@@ -146,271 +158,163 @@ func (a *App) GetWorkloads(namespaces []string) (*kube.WorkloadCounts, error) {
 
 // GetPodDetails returns detailed pod information for the given cluster and pod.
 func (a *App) GetPodDetails(filename string, namespace string, podName string) (*kube.PodDetail, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetPodDetail(a.ctx, namespace, podName)
 }
 
 // GetDeploymentResources returns deployment resources for the given cluster and namespaces.
 func (a *App) GetDeploymentResources(filename string, namespaces []string) ([]kube.DeploymentResource, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetDeploymentResources(a.ctx, namespaces)
 }
 
 // GetDeploymentDetails returns detailed deployment information for the given cluster and deployment.
 func (a *App) GetDeploymentDetails(filename string, namespace string, deploymentName string) (*kube.DeploymentDetail, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetDeploymentDetail(a.ctx, namespace, deploymentName)
 }
 
 // GetDeploymentLogs returns deployment log lines aggregated from its pods.
 func (a *App) GetDeploymentLogs(filename string, namespace string, deploymentName string, tailLines int64) ([]kube.DeploymentLogLine, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetDeploymentLogs(a.ctx, namespace, deploymentName, tailLines)
 }
 
 // UpdateDeploymentManifest updates a deployment using the provided YAML manifest.
 func (a *App) UpdateDeploymentManifest(filename string, namespace string, deploymentName string, manifest string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.UpdateDeploymentManifest(a.ctx, namespace, deploymentName, manifest)
 }
 
 // ScaleDeployment updates deployment replica count.
 func (a *App) ScaleDeployment(filename string, namespace string, deploymentName string, replicas int32) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.ScaleDeployment(a.ctx, namespace, deploymentName, replicas)
 }
 
 // DeleteDeploymentResource deletes a deployment by namespace/name.
 func (a *App) DeleteDeploymentResource(filename string, namespace string, deploymentName string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.DeleteDeployment(a.ctx, namespace, deploymentName)
 }
 
 // GetWorkloadResources returns workload resources for the given kind and namespaces.
 func (a *App) GetWorkloadResources(filename string, kind string, namespaces []string) ([]kube.DeploymentResource, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetWorkloadResources(a.ctx, kind, namespaces)
 }
 
 // GetWorkloadDetails returns detailed workload information for the given kind and resource.
 func (a *App) GetWorkloadDetails(filename string, kind string, namespace string, name string) (*kube.DeploymentDetail, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetWorkloadDetail(a.ctx, kind, namespace, name)
 }
 
 // GetWorkloadLogs returns workload log lines aggregated from selected workload pods.
 func (a *App) GetWorkloadLogs(filename string, kind string, namespace string, name string, tailLines int64) ([]kube.DeploymentLogLine, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetWorkloadLogs(a.ctx, kind, namespace, name, tailLines)
 }
 
 // UpdateWorkloadManifest updates a workload using the provided YAML manifest.
 func (a *App) UpdateWorkloadManifest(filename string, kind string, namespace string, name string, manifest string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.UpdateWorkloadManifest(a.ctx, kind, namespace, name, manifest)
 }
 
 // ScaleWorkload updates workload replica count for scalable workload kinds.
 func (a *App) ScaleWorkload(filename string, kind string, namespace string, name string, replicas int32) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.ScaleWorkload(a.ctx, kind, namespace, name, replicas)
 }
 
 // TriggerCronJobResource creates a manual job from the given cronjob template.
 func (a *App) TriggerCronJobResource(filename string, namespace string, cronJobName string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.TriggerCronJob(a.ctx, namespace, cronJobName)
 }
 
 // SetCronJobSuspendResource updates cronjob suspend state.
 func (a *App) SetCronJobSuspendResource(filename string, namespace string, cronJobName string, suspend bool) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.SetCronJobSuspend(a.ctx, namespace, cronJobName, suspend)
 }
 
 // DeleteWorkloadResource deletes a workload controller resource by kind/namespace/name.
 func (a *App) DeleteWorkloadResource(filename string, kind string, namespace string, name string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.DeleteWorkload(a.ctx, kind, namespace, name)
 }
 
 // DeletePodResource deletes a pod by namespace/name.
 func (a *App) DeletePodResource(filename string, namespace string, podName string) error {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.DeletePod(a.ctx, namespace, podName)
 }
 
 // GetPodLogs returns pod log lines for one or all containers.
 func (a *App) GetPodLogs(filename string, namespace string, podName string, container string) ([]kube.PodLogLine, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.GetPodLogs(a.ctx, namespace, podName, container, 0)
 }
 
 // ExecPodCommand executes a shell command inside a pod container.
 func (a *App) ExecPodCommand(filename string, namespace string, podName string, container string, command string) (*kube.PodExecResult, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect: %w", err)
-	}
-
 	return client.ExecPodCommand(a.ctx, namespace, podName, container, command)
 }
 
@@ -463,14 +367,9 @@ type PodLogsStreamEvent struct {
 
 // StartPodsStream starts a real-time stream for pod resources.
 func (a *App) StartPodsStream(filename string, namespaces []string) (string, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return "", err
-	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect: %w", err)
 	}
 
 	a.mu.Lock()
@@ -505,14 +404,9 @@ func (a *App) StopPodsStream() {
 
 // StartPodLogsStream starts a real-time stream for pod logs.
 func (a *App) StartPodLogsStream(filename string, namespace string, podName string, tailLines int) (string, error) {
-	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	client, err := a.newTempClient(filename)
 	if err != nil {
 		return "", err
-	}
-
-	client, err := kube.NewClient(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect: %w", err)
 	}
 
 	a.mu.Lock()

@@ -2,10 +2,12 @@ package kube
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	cronexpr "github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,6 +27,8 @@ const (
 	workloadControllerReplica    workloadControllerKind = "replicaset"
 	workloadControllerJob        workloadControllerKind = "job"
 	workloadControllerCronJob    workloadControllerKind = "cronjob"
+	workloadControllerConfigMap  workloadControllerKind = "configmap"
+	workloadControllerSecret     workloadControllerKind = "secret"
 )
 
 func parseWorkloadControllerKind(kind string) (workloadControllerKind, error) {
@@ -41,6 +45,10 @@ func parseWorkloadControllerKind(kind string) (workloadControllerKind, error) {
 		return workloadControllerJob, nil
 	case string(workloadControllerCronJob):
 		return workloadControllerCronJob, nil
+	case string(workloadControllerConfigMap):
+		return workloadControllerConfigMap, nil
+	case string(workloadControllerSecret):
+		return workloadControllerSecret, nil
 	default:
 		return "", fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -341,6 +349,32 @@ func int32Max(value int32, minimum int32) int32 {
 	return value
 }
 
+func configMapDataMap(item *corev1.ConfigMap) map[string]string {
+	result := make(map[string]string, len(item.Data)+len(item.BinaryData))
+	for key, value := range item.Data {
+		result[key] = value
+	}
+	for key, value := range item.BinaryData {
+		result[key] = base64.StdEncoding.EncodeToString(value)
+	}
+	return result
+}
+
+func secretDataMap(item *corev1.Secret) map[string]string {
+	result := make(map[string]string, len(item.Data)+len(item.StringData))
+	for key, value := range item.StringData {
+		result[key] = value
+	}
+	for key, value := range item.Data {
+		if utf8.Valid(value) {
+			result[key] = string(value)
+		} else {
+			result[key] = base64.StdEncoding.EncodeToString(value)
+		}
+	}
+	return result
+}
+
 func (c *Client) listCronJobsOwnedJobs(ctx context.Context, namespace string, cronJob *batchv1.CronJob) ([]batchv1.Job, error) {
 	jobs, err := c.clientset.BatchV1().Jobs(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -620,6 +654,46 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Annotations:   annotations,
 				})
 			}
+		case workloadControllerConfigMap:
+			list, listErr := c.clientset.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{})
+			if listErr != nil {
+				return nil, fmt.Errorf("failed to list config maps: %w", listErr)
+			}
+			for _, item := range list.Items {
+				keysCount := len(item.Data) + len(item.BinaryData)
+				labels, annotations := copyLabelsAndAnnotations(item.Labels, item.Annotations)
+				items = append(items, DeploymentResource{
+					Name:          item.Name,
+					Namespace:     item.Namespace,
+					Pods:          fmt.Sprintf("%d", keysCount),
+					Replicas:      int32(keysCount),
+					Status:        "ConfigMap",
+					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
+					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
+					Labels:        labels,
+					Annotations:   annotations,
+				})
+			}
+		case workloadControllerSecret:
+			list, listErr := c.clientset.CoreV1().Secrets(ns).List(ctx, metav1.ListOptions{})
+			if listErr != nil {
+				return nil, fmt.Errorf("failed to list secrets: %w", listErr)
+			}
+			for _, item := range list.Items {
+				keysCount := len(item.Data) + len(item.StringData)
+				labels, annotations := copyLabelsAndAnnotations(item.Labels, item.Annotations)
+				items = append(items, DeploymentResource{
+					Name:          item.Name,
+					Namespace:     item.Namespace,
+					Pods:          fmt.Sprintf("%d", keysCount),
+					Replicas:      int32(keysCount),
+					Status:        stringOrDefault(string(item.Type), "Opaque"),
+					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
+					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
+					Labels:        labels,
+					Annotations:   annotations,
+				})
+			}
 		}
 	}
 
@@ -658,6 +732,10 @@ func (c *Client) GetWorkloadDetail(ctx context.Context, kind string, namespace s
 		return c.getJobDetail(ctx, namespace, name)
 	case workloadControllerCronJob:
 		return c.getCronJobDetail(ctx, namespace, name)
+	case workloadControllerConfigMap:
+		return c.getConfigMapDetail(ctx, namespace, name)
+	case workloadControllerSecret:
+		return c.getSecretDetail(ctx, namespace, name)
 	default:
 		return nil, fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -890,6 +968,47 @@ func (c *Client) UpdateWorkloadManifest(ctx context.Context, kind string, namesp
 			return fmt.Errorf("failed to update cronjob: %w", updateErr)
 		}
 		return nil
+	case workloadControllerConfigMap:
+		var configMap corev1.ConfigMap
+		if unmarshalErr := yaml.Unmarshal([]byte(manifest), &configMap); unmarshalErr != nil {
+			return fmt.Errorf("failed to parse config map manifest: %w", unmarshalErr)
+		}
+		current, getErr := c.clientset.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing config map: %w", getErr)
+		}
+		configMap.Name = name
+		configMap.Namespace = namespace
+		if strings.TrimSpace(configMap.ResourceVersion) == "" {
+			configMap.ResourceVersion = current.ResourceVersion
+		}
+		configMap.ManagedFields = nil
+		if _, updateErr := c.clientset.CoreV1().ConfigMaps(namespace).Update(ctx, &configMap, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("failed to update config map: %w", updateErr)
+		}
+		return nil
+	case workloadControllerSecret:
+		var secret corev1.Secret
+		if unmarshalErr := yaml.Unmarshal([]byte(manifest), &secret); unmarshalErr != nil {
+			return fmt.Errorf("failed to parse secret manifest: %w", unmarshalErr)
+		}
+		current, getErr := c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get existing secret: %w", getErr)
+		}
+		secret.Name = name
+		secret.Namespace = namespace
+		if strings.TrimSpace(secret.ResourceVersion) == "" {
+			secret.ResourceVersion = current.ResourceVersion
+		}
+		if strings.TrimSpace(string(secret.Type)) == "" {
+			secret.Type = current.Type
+		}
+		secret.ManagedFields = nil
+		if _, updateErr := c.clientset.CoreV1().Secrets(namespace).Update(ctx, &secret, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("failed to update secret: %w", updateErr)
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -970,6 +1089,16 @@ func (c *Client) DeleteWorkload(ctx context.Context, kind string, namespace stri
 	case workloadControllerCronJob:
 		if deleteErr := c.clientset.BatchV1().CronJobs(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
 			return fmt.Errorf("failed to delete cronjob: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerConfigMap:
+		if deleteErr := c.clientset.CoreV1().ConfigMaps(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete config map: %w", deleteErr)
+		}
+		return nil
+	case workloadControllerSecret:
+		if deleteErr := c.clientset.CoreV1().Secrets(namespace).Delete(ctx, name, metav1.DeleteOptions{}); deleteErr != nil {
+			return fmt.Errorf("failed to delete secret: %w", deleteErr)
 		}
 		return nil
 	default:
@@ -1061,12 +1190,9 @@ func (c *Client) getDaemonSetDetail(ctx context.Context, namespace string, name 
 	}
 
 	labels, annotations := copyLabelsAndAnnotations(daemonSet.Labels, daemonSet.Annotations)
-	manifest := "-"
 	manifestObject := daemonSet.DeepCopy()
 	manifestObject.ManagedFields = nil
-	if bytes, marshalErr := yaml.Marshal(manifestObject); marshalErr == nil {
-		manifest = strings.TrimRight(string(bytes), "\n")
-	}
+	manifest := marshalManifest(manifestObject)
 
 	return &DeploymentDetail{
 		Name:            daemonSet.Name,
@@ -1123,12 +1249,9 @@ func (c *Client) getStatefulSetDetail(ctx context.Context, namespace string, nam
 	}
 
 	labels, annotations := copyLabelsAndAnnotations(statefulSet.Labels, statefulSet.Annotations)
-	manifest := "-"
 	manifestObject := statefulSet.DeepCopy()
 	manifestObject.ManagedFields = nil
-	if bytes, marshalErr := yaml.Marshal(manifestObject); marshalErr == nil {
-		manifest = strings.TrimRight(string(bytes), "\n")
-	}
+	manifest := marshalManifest(manifestObject)
 
 	replicas := replicasFromPointer(statefulSet.Spec.Replicas, 1)
 	return &DeploymentDetail{
@@ -1186,12 +1309,9 @@ func (c *Client) getReplicaSetDetail(ctx context.Context, namespace string, name
 	}
 
 	labels, annotations := copyLabelsAndAnnotations(replicaSet.Labels, replicaSet.Annotations)
-	manifest := "-"
 	manifestObject := replicaSet.DeepCopy()
 	manifestObject.ManagedFields = nil
-	if bytes, marshalErr := yaml.Marshal(manifestObject); marshalErr == nil {
-		manifest = strings.TrimRight(string(bytes), "\n")
-	}
+	manifest := marshalManifest(manifestObject)
 
 	replicas := replicasFromPointer(replicaSet.Spec.Replicas, 1)
 	return &DeploymentDetail{
@@ -1253,12 +1373,9 @@ func (c *Client) getJobDetail(ctx context.Context, namespace string, name string
 	}
 
 	labels, annotations := copyLabelsAndAnnotations(job.Labels, job.Annotations)
-	manifest := "-"
 	manifestObject := job.DeepCopy()
 	manifestObject.ManagedFields = nil
-	if bytes, marshalErr := yaml.Marshal(manifestObject); marshalErr == nil {
-		manifest = strings.TrimRight(string(bytes), "\n")
-	}
+	manifest := marshalManifest(manifestObject)
 
 	strategyType := "-"
 	if job.Spec.CompletionMode != nil {
@@ -1380,12 +1497,9 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 	}
 
 	labels, annotations := copyLabelsAndAnnotations(cronJob.Labels, cronJob.Annotations)
-	manifest := "-"
 	manifestObject := cronJob.DeepCopy()
 	manifestObject.ManagedFields = nil
-	if bytes, marshalErr := yaml.Marshal(manifestObject); marshalErr == nil {
-		manifest = strings.TrimRight(string(bytes), "\n")
-	}
+	manifest := marshalManifest(manifestObject)
 
 	activeCount := int32(len(cronJob.Status.Active))
 	suspend := cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend
@@ -1421,6 +1535,78 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 		Revisions:       revisions,
 		Pods:            pods,
 		Events:          objectEvents(ctx, c, namespace, "CronJob", cronJob.Name, string(cronJob.UID)),
+		Manifest:        manifest,
+		ScaleSupported:  false,
+	}, nil
+}
+
+func (c *Client) getConfigMapDetail(ctx context.Context, namespace string, name string) (*DeploymentDetail, error) {
+	configMap, err := c.clientset.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config map: %w", err)
+	}
+
+	labels, annotations := copyLabelsAndAnnotations(configMap.Labels, configMap.Annotations)
+	manifestObject := configMap.DeepCopy()
+	manifestObject.ManagedFields = nil
+	manifest := marshalManifest(manifestObject)
+	data := configMapDataMap(configMap)
+	keysCount := int32(len(data))
+
+	return &DeploymentDetail{
+		Name:            configMap.Name,
+		Namespace:       configMap.Namespace,
+		Status:          "ConfigMap",
+		Replicas:        keysCount,
+		Current:         keysCount,
+		Ready:           keysCount,
+		Updated:         keysCount,
+		Available:       keysCount,
+		Unavailable:     0,
+		Age:             formatAge(time.Since(configMap.CreationTimestamp.Time)),
+		Created:         configMap.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
+		UID:             stringOrDefault(string(configMap.UID), "-"),
+		ResourceVersion: stringOrDefault(configMap.ResourceVersion, "-"),
+		Labels:          labels,
+		Annotations:     annotations,
+		Selector:        data,
+		Events:          objectEvents(ctx, c, namespace, "ConfigMap", configMap.Name, string(configMap.UID)),
+		Manifest:        manifest,
+		ScaleSupported:  false,
+	}, nil
+}
+
+func (c *Client) getSecretDetail(ctx context.Context, namespace string, name string) (*DeploymentDetail, error) {
+	secret, err := c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get secret: %w", err)
+	}
+
+	labels, annotations := copyLabelsAndAnnotations(secret.Labels, secret.Annotations)
+	manifestObject := secret.DeepCopy()
+	manifestObject.ManagedFields = nil
+	manifest := marshalManifest(manifestObject)
+	data := secretDataMap(secret)
+	keysCount := int32(len(data))
+
+	return &DeploymentDetail{
+		Name:            secret.Name,
+		Namespace:       secret.Namespace,
+		Status:          stringOrDefault(string(secret.Type), "Opaque"),
+		Replicas:        keysCount,
+		Current:         keysCount,
+		Ready:           keysCount,
+		Updated:         keysCount,
+		Available:       keysCount,
+		Unavailable:     0,
+		Age:             formatAge(time.Since(secret.CreationTimestamp.Time)),
+		Created:         secret.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
+		UID:             stringOrDefault(string(secret.UID), "-"),
+		ResourceVersion: stringOrDefault(secret.ResourceVersion, "-"),
+		Labels:          labels,
+		Annotations:     annotations,
+		Selector:        data,
+		Events:          objectEvents(ctx, c, namespace, "Secret", secret.Name, string(secret.UID)),
 		Manifest:        manifest,
 		ScaleSupported:  false,
 	}, nil

@@ -6,18 +6,22 @@ import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterT
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
 import { useShortcutSettings } from './shared/hooks/useShortcutSettings'
 import { useDragResize } from './shared/hooks/useDragResize'
-import type { ClusterInfo, DeploymentResource, PodResource } from './shared/types'
+import type { ClusterInfo, DeploymentResource, PodResource, ConfigResource, ConfigTabId } from './shared/types'
 import Setup from './features/setup/Setup'
 import Sidebar from './features/sidebar/Sidebar'
 import Overview from './features/overview/Overview'
 import WorkloadsView from './features/workloads/WorkloadsView'
+import ConfigView from './features/config/ConfigView'
 import PodDetailPanel, { type PodDetailsTabId } from './features/workloads/pods/components/PodDetailPanel'
 import DeploymentDetailPanel, { type DeploymentDetailsTabId } from './features/workloads/deployments/components/DeploymentDetailPanel'
+import ConfigDetailPanel, { type ConfigDetailsTabId } from './features/config/components/ConfigDetailPanel'
 import { workloadSingularLabel, type NonPodWorkloadTabId } from './features/workloads/workloadKinds'
+import { configSingularLabel, isImplementedConfigTab, type ImplementedConfigTabId } from './features/config/configKinds'
 import { usePodDetail } from './features/workloads/pods/hooks/usePodDetail'
 import { usePodLogs } from './features/workloads/pods/hooks/usePodLogs'
 import { useDeploymentDetail } from './features/workloads/deployments/hooks/useDeploymentDetail'
 import { useDeploymentLogs } from './features/workloads/deployments/hooks/useDeploymentLogs'
+import { useConfigDetail } from './features/config/hooks/useConfigDetail'
 import Settings from './features/settings/Settings'
 import Modal from './shared/components/Modal'
 import './App.css'
@@ -32,14 +36,16 @@ interface PodDetailTabState {
   id: string
   clusterFilename: string
   clusterName: string
-  kind: 'pod' | 'deployment'
+  kind: 'pod' | 'deployment' | 'config'
   workloadTab?: NonPodWorkloadTabId
+  configTab?: ConfigTabId
   pod?: PodResource
   deployment?: DeploymentResource
+  configResource?: ConfigResource
   pinned: boolean
 }
 
-type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId
+type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId
 
 function getPodDetailTabId(clusterFilename: string, pod: PodResource): string {
   return `pod:${clusterFilename}:${pod.namespace}:${pod.name}`
@@ -53,6 +59,14 @@ function getDeploymentDetailTabId(
   return `workload:${workloadTab}:${clusterFilename}:${deployment.namespace}:${deployment.name}`
 }
 
+function getConfigDetailTabId(
+  clusterFilename: string,
+  configTab: ConfigTabId,
+  resource: ConfigResource,
+): string {
+  return `config:${configTab}:${clusterFilename}:${resource.namespace}:${resource.name}`
+}
+
 function getPodRowKey(pod: PodResource): string {
   return `${pod.namespace}/${pod.name}`
 }
@@ -62,10 +76,14 @@ function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
     const kindLabel = workloadSingularLabel(tab.workloadTab ?? 'deployments')
     return `${kindLabel}: ${tab.deployment?.name ?? '-'} < ${tab.clusterName} >`
   }
+  if (tab.kind === 'config') {
+    const kindLabel = configSingularLabel(tab.configTab ?? 'config-maps')
+    return `${kindLabel}: ${tab.configResource?.name ?? '-'} < ${tab.clusterName} >`
+  }
   return `${tab.pod?.name ?? '-'} < ${tab.clusterName} >`
 }
 
-function normalizeDetailPanelTab(kind: 'pod' | 'deployment', tab?: DetailPanelTabId): DetailPanelTabId {
+function normalizeDetailPanelTab(kind: 'pod' | 'deployment' | 'config', tab?: DetailPanelTabId): DetailPanelTabId {
   if (kind === 'deployment') {
     return (
       tab === 'overview'
@@ -74,6 +92,12 @@ function normalizeDetailPanelTab(kind: 'pod' | 'deployment', tab?: DetailPanelTa
       || tab === 'yaml'
       || tab === 'scale'
       || tab === 'logs'
+    ) ? tab : 'overview'
+  }
+  if (kind === 'config') {
+    return (
+      tab === 'overview'
+      || tab === 'yaml'
     ) ? tab : 'overview'
   }
   return (
@@ -140,6 +164,12 @@ export default function App() {
   const activeDeploymentWorkloadTab = activePodDetailTab?.kind === 'deployment'
     ? (activePodDetailTab.workloadTab ?? 'deployments')
     : 'deployments'
+  const activeConfigForDetail = activePodDetailTab?.kind === 'config'
+    ? (activePodDetailTab.configResource ?? null)
+    : null
+  const activeConfigTab = activePodDetailTab?.kind === 'config'
+    ? (activePodDetailTab.configTab ?? 'config-maps')
+    : 'config-maps'
 
   const { podDetail, podDetailLoading, podDetailError } = usePodDetail(
     activePodDetailTab?.clusterFilename ?? '',
@@ -161,6 +191,11 @@ export default function App() {
     activeDeploymentForDetail,
     Boolean(activeDeploymentForDetail && activePodDetailPanelTab === 'logs'),
     activeDeploymentWorkloadTab,
+  )
+  const { configDetail, configDetailLoading, configDetailError } = useConfigDetail(
+    activePodDetailTab?.clusterFilename ?? '',
+    activeConfigForDetail,
+    isImplementedConfigTab(activeConfigTab) ? activeConfigTab : 'config-maps',
   )
 
   const handleClosePodDetailTab = useCallback((tabId: string) => {
@@ -215,8 +250,10 @@ export default function App() {
           clusterName: cluster.name,
           kind: 'pod',
           workloadTab: undefined,
+          configTab: undefined,
           pod,
           deployment: undefined,
+          configResource: undefined,
           pinned: next[existingIndex].pinned || options.pin,
         }
         return next
@@ -231,8 +268,10 @@ export default function App() {
           clusterName: cluster.name,
           kind: 'pod',
           workloadTab: undefined,
+          configTab: undefined,
           pod,
           deployment: undefined,
+          configResource: undefined,
           pinned: options.pin,
         },
       ]
@@ -277,8 +316,10 @@ export default function App() {
           clusterName: cluster.name,
           kind: 'deployment',
           workloadTab,
+          configTab: undefined,
           deployment,
           pod: undefined,
+          configResource: undefined,
           pinned: next[existingIndex].pinned || options.pin,
         }
         return next
@@ -293,8 +334,76 @@ export default function App() {
           clusterName: cluster.name,
           kind: 'deployment',
           workloadTab,
+          configTab: undefined,
           deployment,
           pod: undefined,
+          configResource: undefined,
+          pinned: options.pin,
+        },
+      ]
+    })
+
+    setActivePodDetailTabId(tabId)
+    if (podDetailTabs.length === 0) {
+      const mainBody = mainBodyRef.current
+      if (mainBody) {
+        const totalWidth = mainBody.clientWidth
+        const maxWidth = getSplitMaxWidth(totalWidth)
+        const halfWidth = Math.floor(totalWidth / 2)
+        setDetailPanelWidth(clamp(halfWidth, APP_DETAIL_MIN_WIDTH, maxWidth))
+      }
+    }
+    setDetailPanelTabByPodTabId(current => (
+      Object.prototype.hasOwnProperty.call(current, tabId)
+        ? current
+        : { ...current, [tabId]: inheritedDetailTab }
+    ))
+  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+
+  const handleActivateConfigDetail = useCallback((
+    cluster: ClusterInfo,
+    configTab: ConfigTabId,
+    resource: ConfigResource,
+    options: { pin: boolean },
+  ) => {
+    const tabId = getConfigDetailTabId(cluster.filename, configTab, resource)
+    const inheritedDetailTab = normalizeDetailPanelTab(
+      'config',
+      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+    ) as ConfigDetailsTabId
+    setShowSettings(false)
+
+    setPodDetailTabs(current => {
+      const existingIndex = current.findIndex(tab => tab.id === tabId)
+      if (existingIndex >= 0) {
+        const next = [...current]
+        next[existingIndex] = {
+          ...next[existingIndex],
+          clusterName: cluster.name,
+          kind: 'config',
+          workloadTab: undefined,
+          configTab,
+          deployment: undefined,
+          pod: undefined,
+          configResource: resource,
+          pinned: next[existingIndex].pinned || options.pin,
+        }
+        return next
+      }
+
+      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      return [
+        ...base,
+        {
+          id: tabId,
+          clusterFilename: cluster.filename,
+          clusterName: cluster.name,
+          kind: 'config',
+          workloadTab: undefined,
+          configTab,
+          deployment: undefined,
+          pod: undefined,
+          configResource: resource,
           pinned: options.pin,
         },
       ]
@@ -505,6 +614,14 @@ export default function App() {
     ? `${activePodDetailTab.deployment?.namespace ?? ''}/${activePodDetailTab.deployment?.name ?? ''}`
     : null
 
+  const activeConfigKey = (activeTab?.section === 'config'
+    && activePodDetailTab
+    && activePodDetailTab.kind === 'config'
+    && activePodDetailTab.clusterFilename === activeTab.cluster.filename
+    && (activePodDetailTab.configTab ?? 'config-maps') === activeTab.configTab)
+    ? `${activePodDetailTab.configResource?.namespace ?? ''}/${activePodDetailTab.configResource?.name ?? ''}`
+    : null
+
   const handleDetailsResizeStart = (event: ReactMouseEvent<HTMLButtonElement>) => {
     const mainBody = mainBodyRef.current
     if (!mainBody) {
@@ -543,6 +660,7 @@ export default function App() {
             activeCluster={activeTab?.cluster ?? null}
             activeSection={activeTab?.section ?? null}
             activeWorkloadTab={activeTab?.section !== 'workloads' ? null : activeTab.workloadTab}
+            activeConfigTab={activeTab?.section !== 'config' ? null : activeTab.configTab}
             showSettings={showSettings}
             onToggleCollapse={sidebar.onToggle}
             onSelect={handleSelectCluster}
@@ -630,6 +748,21 @@ export default function App() {
                   options,
                 )}
               />
+            ) : activeTab.section === 'config' ? (
+              <ConfigView
+                cluster={activeTab.cluster}
+                activeTab={activeTab.configTab}
+                namespaces={clusterTabs.activeConfigNamespaceOptions}
+                selectedNamespaces={clusterTabs.activeConfigNamespaces}
+                onNamespacesChange={clusterTabs.handleConfigNamespacesChange}
+                activeConfigKey={activeConfigKey}
+                onConfigActivate={(resource, options) => handleActivateConfigDetail(
+                  activeTab.cluster,
+                  activeTab.configTab,
+                  resource,
+                  options,
+                )}
+              />
             ) : (
               <Overview
                 cluster={activeTab.cluster}
@@ -703,7 +836,7 @@ export default function App() {
                       onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
                       onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
                     />
-                  ) : (
+                  ) : activePodDetailTab.kind === 'deployment' ? (
                     <DeploymentDetailPanel
                       clusterFilename={activePodDetailTab.clusterFilename}
                       workloadTab={activePodDetailTab.workloadTab ?? 'deployments'}
@@ -717,6 +850,22 @@ export default function App() {
                       deploymentLogs={deploymentLogs}
                       deploymentLogsLoading={deploymentLogsLoading}
                       deploymentLogsError={deploymentLogsError}
+                      detailsMaximized={detailPanelMaximized}
+                      showMaximizeButton
+                      onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                      onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+                    />
+                  ) : (
+                    <ConfigDetailPanel
+                      clusterFilename={activePodDetailTab.clusterFilename}
+                      configTab={activePodDetailTab.configTab ?? 'config-maps'}
+                      mode={detailPanelMaximized ? 'modal' : 'split'}
+                      activeDetailsTab={normalizeDetailPanelTab('config', activePodDetailPanelTab) as ConfigDetailsTabId}
+                      onDetailsTabChange={handlePodDetailPanelTabChange}
+                      selectedResource={activePodDetailTab.configResource as ConfigResource}
+                      configDetail={configDetail}
+                      configDetailLoading={configDetailLoading}
+                      configDetailError={configDetailError}
                       detailsMaximized={detailPanelMaximized}
                       showMaximizeButton
                       onToggleMaximize={() => setDetailPanelMaximized(current => !current)}

@@ -246,7 +246,8 @@
   color: var(--accent);
 }
 
-.cluster-workloads-list {
+.cluster-workloads-list,
+.cluster-config-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -258,7 +259,8 @@
   background: linear-gradient(180deg, rgba(9, 25, 55, 0.8) 0%, rgba(7, 20, 44, 0.8) 100%);
 }
 
-.cluster-workload-item {
+.cluster-workload-item,
+.cluster-config-item {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid transparent;
@@ -269,12 +271,14 @@
   transition: all 0.12s;
 }
 
-.cluster-workload-item:hover {
+.cluster-workload-item:hover,
+.cluster-config-item:hover {
   background: rgba(62, 111, 247, 0.12);
   color: var(--text-primary);
 }
 
-.cluster-workload-item.active {
+.cluster-workload-item.active,
+.cluster-config-item.active {
   background: var(--accent-glow);
   border-color: var(--accent-dim);
   color: var(--text-primary);
@@ -290,7 +294,8 @@
 }
 
 .cluster-sub-item.keyboard-focused,
-.cluster-workload-item.keyboard-focused {
+.cluster-workload-item.keyboard-focused,
+.cluster-config-item.keyboard-focused {
   background: rgba(108, 140, 255, 0.08);
   color: var(--text-primary);
 }

@@ -14,9 +14,19 @@ import { parsePhase } from '../../../../shared/utils/formatting'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import type { NonPodWorkloadTabId } from '../../workloadKinds'
 import { toWorkloadAPIKind, workloadSingularLabel } from '../../workloadKinds'
+import {
+  valueToneClass,
+  formatCommandDisplay,
+  tryFormatLongJSONValue,
+  isLongMetadataValue,
+  renderMetadataValue,
+  detectLogTone,
+  matchesLogLevel,
+  formatMapAsInline,
+} from '../../shared/detailHelpers'
 import '../../pods/PodsTable.css'
 
-export type DeploymentDetailsTabId = 'overview' | 'metadata' | 'containers' | 'scale' | 'logs' | 'yaml' 
+export type DeploymentDetailsTabId = 'overview' | 'metadata' | 'containers' | 'scale' | 'logs' | 'yaml'
 
 type MetadataSectionKey =
   | 'labels'
@@ -30,7 +40,6 @@ type MetadataSectionKey =
   | 'podAntiAffinities'
 
 type ContainerSectionKey = 'env' | 'ports' | 'mounts' | 'args'
-type LogToneKey = 'error' | 'success' | 'warning' | 'debug' | 'default'
 type LogsStatusFilter = 'all' | 'debug' | 'info' | 'warning' | 'error'
 
 const DETAIL_TABS_BASE: Array<{ id: DeploymentDetailsTabId; label: string }> = [
@@ -107,140 +116,12 @@ interface Props {
   onClose: () => void
 }
 
-function valueToneClass(value: string): 'ok' | 'warn' | 'bad' | 'neutral' {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === '' || normalized === '-') {
-    return 'neutral'
-  }
-  if (
-    normalized.includes('true')
-    || normalized.includes('yes')
-    || normalized.includes('running')
-    || normalized.includes('ready')
-    || normalized.includes('available')
-    || normalized.includes('updated')
-  ) {
-    return 'ok'
-  }
-  if (normalized.includes('false') || normalized.includes('failed') || normalized.includes('error') || normalized.includes('unavailable')) {
-    return 'bad'
-  }
-  if (normalized.includes('pending') || normalized.includes('updating') || normalized.includes('unknown')) {
-    return 'warn'
-  }
-  return 'neutral'
-}
-
-function detectLogTone(message: string): LogToneKey {
-  const value = message.toLowerCase()
-  if (/\b(error|fatal|panic|exception|traceback)\b/.test(value)) {
-    return 'error'
-  }
-  if (/\b(warn|warning)\b/.test(value)) {
-    return 'warning'
-  }
-  if (/\b(debug)\b/.test(value)) {
-    return 'debug'
-  }
-  if (/\b(info|success|succeeded|successful|ok)\b/.test(value)) {
-    return 'success'
-  }
-  return 'default'
-}
-
-function formatCommandDisplay(parts: string[]): string {
-  const filtered = parts.map(item => item.trim()).filter(Boolean)
-  if (filtered.length === 0) {
-    return '-'
-  }
-  if (filtered.length > 1) {
-    return filtered.join('\n')
-  }
-  const single = filtered[0]
-  if (!single.includes(' --')) {
-    return single
-  }
-  return single.replace(/\s+(--[^\s]+)/g, '\n$1')
-}
-
 function matchesLogsStatus(message: string, filter: LogsStatusFilter): boolean {
-  if (filter === 'all') {
-    return true
-  }
-  const tone = detectLogTone(message)
-  if (filter === 'info') {
-    return tone === 'success'
-  }
-  return tone === filter
+  return matchesLogLevel(message, filter)
 }
 
 function formatStatusOption(option: LogsStatusFilter): string {
   return LOGS_STATUS_OPTIONS.find(item => item.value === option)?.label ?? 'All Status'
-}
-
-function formatMapAsInline(mapValue: Record<string, string> | undefined, fallback = '-'): string {
-  if (!mapValue) {
-    return fallback
-  }
-  const entries = Object.entries(mapValue)
-  if (entries.length === 0) {
-    return fallback
-  }
-  return entries
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `${key}=${value}`)
-    .join(', ')
-}
-
-function tryFormatLongJSONValue(rawValue: string): string | null {
-  const trimmed = rawValue.trim()
-  if (trimmed.length < 72) {
-    return null
-  }
-
-  const looksLikeJSON = (
-    (trimmed.startsWith('{') && trimmed.endsWith('}'))
-    || (trimmed.startsWith('[') && trimmed.endsWith(']'))
-  )
-  if (!looksLikeJSON) {
-    return null
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as unknown
-    if (!parsed || typeof parsed !== 'object') {
-      return null
-    }
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return null
-  }
-}
-
-function isLongMetadataValue(displayValue: string): boolean {
-  if (displayValue.length > 900) {
-    return true
-  }
-  return displayValue.split('\n').length > 14
-}
-
-function renderMetadataValue(
-  value: string,
-  options?: {
-    prettyJson?: string | null
-    collapsed?: boolean
-  },
-) {
-  const safeValue = value.trim() ? value : '-'
-  const resolvedPrettyJson = options?.prettyJson ?? tryFormatLongJSONValue(safeValue)
-  const collapsedClass = options?.collapsed ? ' is-collapsed' : ''
-  if (!resolvedPrettyJson) {
-    return <span className={`pods-meta-text-value${collapsedClass}`}>{safeValue}</span>
-  }
-
-  return (
-    <code className={`pods-meta-json-value${collapsedClass}`}>{resolvedPrettyJson}</code>
-  )
 }
 
 export default function DeploymentDetailPanel({

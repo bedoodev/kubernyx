@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { ClusterInfo, ClusterOverview, WorkloadCounts, NodeFilter, ClusterHealthStatus, WorkloadStatuses, ClusterSection, WorkloadTabId } from '../types'
-import { WORKLOAD_TAB_OPTIONS } from '../types'
+import type { ClusterInfo, ClusterOverview, WorkloadCounts, NodeFilter, ClusterSection, WorkloadTabId, ConfigTabId } from '../types'
+import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS } from '../types'
 import { toClusterHealthStatus, normalizeWorkloads } from '../utils/normalization'
 import {
   ListClusters,
@@ -17,12 +17,14 @@ import {
 const DOUBLE_SELECT_WINDOW_MS = 400
 const OVERVIEW_TAB_TITLE = 'Overview'
 const DEFAULT_WORKLOAD_TAB: WorkloadTabId = 'pods'
+const DEFAULT_CONFIG_TAB: ConfigTabId = 'config-maps'
 
 export interface ClusterTabState {
   id: string
   title: string
   section: ClusterSection
   workloadTab: WorkloadTabId
+  configTab: ConfigTabId
   hasActivity: boolean
   cluster: ClusterInfo
   overview: ClusterOverview | null
@@ -33,15 +35,27 @@ export interface ClusterTabState {
   error: string | null
 }
 
-export function getClusterTabId(section: ClusterSection, clusterFilename: string, workloadTab: WorkloadTabId = DEFAULT_WORKLOAD_TAB): string {
+export function getClusterTabId(
+  section: ClusterSection,
+  clusterFilename: string,
+  workloadTab: WorkloadTabId = DEFAULT_WORKLOAD_TAB,
+  configTab: ConfigTabId = DEFAULT_CONFIG_TAB,
+): string {
   if (section === 'overview') {
     return `overview:${clusterFilename}`
   }
-  return `workload:${workloadTab}:${clusterFilename}`
+  if (section === 'workloads') {
+    return `workload:${workloadTab}:${clusterFilename}`
+  }
+  return `config:${configTab}:${clusterFilename}`
 }
 
 export function getWorkloadTabTitle(workloadTab: WorkloadTabId): string {
   return WORKLOAD_TAB_OPTIONS.find(option => option.id === workloadTab)?.label ?? 'Workload'
+}
+
+export function getConfigTabTitle(configTab: ConfigTabId): string {
+  return CONFIG_TAB_OPTIONS.find(option => option.id === configTab)?.label ?? 'Config'
 }
 
 export function getTabDisplayName(tab: ClusterTabState): string {
@@ -59,14 +73,23 @@ function createClusterTab(
   cluster: ClusterInfo,
   section: ClusterSection,
   workloadTab: WorkloadTabId = DEFAULT_WORKLOAD_TAB,
+  configTab: ConfigTabId = DEFAULT_CONFIG_TAB,
   selectedNamespaces: string[] = [],
 ): ClusterTabState {
   const normalizedWorkloadTab = section === 'workloads' ? workloadTab : DEFAULT_WORKLOAD_TAB
+  const normalizedConfigTab = section === 'config' ? configTab : DEFAULT_CONFIG_TAB
+  const title = section === 'overview'
+    ? OVERVIEW_TAB_TITLE
+    : section === 'workloads'
+      ? getWorkloadTabTitle(normalizedWorkloadTab)
+      : getConfigTabTitle(normalizedConfigTab)
+
   return {
-    id: getClusterTabId(section, cluster.filename, normalizedWorkloadTab),
-    title: section === 'overview' ? OVERVIEW_TAB_TITLE : getWorkloadTabTitle(normalizedWorkloadTab),
+    id: getClusterTabId(section, cluster.filename, normalizedWorkloadTab, normalizedConfigTab),
+    title,
     section,
     workloadTab: normalizedWorkloadTab,
+    configTab: normalizedConfigTab,
     hasActivity: false,
     cluster,
     overview: null,
@@ -88,14 +111,18 @@ export interface UseClusterTabsResult {
   activeTabId: string | null
   activeTab: ClusterTabState | null
   activeWorkloadClusterFilename: string | null
+  activeConfigClusterFilename: string | null
   activeWorkloadNamespaces: string[]
+  activeConfigNamespaces: string[]
   activeWorkloadNamespaceOptions: string[]
-  handleSelectCluster: (cluster: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId) => void
+  activeConfigNamespaceOptions: string[]
+  handleSelectCluster: (cluster: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId) => void
   handleActivateTab: (tabId: string) => void
   handleCloseTab: (tabId: string) => void
   handleNodeFilterChange: (filter: NodeFilter) => Promise<void>
   handleNamespacesChange: (ns: string[]) => Promise<void>
   handleWorkloadNamespacesChange: (ns: string[]) => Promise<void>
+  handleConfigNamespacesChange: (ns: string[]) => Promise<void>
   handleAddCluster: (name: string, content: string) => Promise<void>
   handleRenameCluster: (oldFilename: string, newName: string) => Promise<void>
   handleDeleteCluster: (filename: string) => Promise<void>
@@ -108,21 +135,30 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
   const [clusters, setClusters] = useState<ClusterInfo[]>([])
   const [tabs, setTabs] = useState<ClusterTabState[]>([])
   const [activeTabId, setActiveTabId] = useState<string | null>(null)
-  const [workloadNamespacesByCluster, setWorkloadNamespacesByCluster] = useState<Record<string, string[]>>({})
-  const [workloadNamespaceOptionsByCluster, setWorkloadNamespaceOptionsByCluster] = useState<Record<string, string[]>>({})
+  const [resourceNamespacesByCluster, setResourceNamespacesByCluster] = useState<Record<string, string[]>>({})
+  const [resourceNamespaceOptionsByCluster, setResourceNamespaceOptionsByCluster] = useState<Record<string, string[]>>({})
   const previousActiveTabIdRef = useRef<string | null>(null)
   const previousSidebarSelectionRef = useRef<{ tabId: string; at: number } | null>(null)
   const tabRequestRef = useRef<Record<string, number>>({})
 
   const activeTab = activeTabId ? tabs.find(tab => tab.id === activeTabId) ?? null : null
-  const activeWorkloadClusterFilename = (activeTab?.section === 'workloads')
+  const activeWorkloadClusterFilename = activeTab?.section === 'workloads' ? activeTab.cluster.filename : null
+  const activeConfigClusterFilename = activeTab?.section === 'config' ? activeTab.cluster.filename : null
+  const activeResourceClusterFilename = (activeTab?.section === 'workloads' || activeTab?.section === 'config')
     ? activeTab.cluster.filename
     : null
+
   const activeWorkloadNamespaces = activeWorkloadClusterFilename
-    ? (workloadNamespacesByCluster[activeWorkloadClusterFilename] ?? [])
+    ? (resourceNamespacesByCluster[activeWorkloadClusterFilename] ?? [])
+    : []
+  const activeConfigNamespaces = activeConfigClusterFilename
+    ? (resourceNamespacesByCluster[activeConfigClusterFilename] ?? [])
     : []
   const activeWorkloadNamespaceOptions = activeWorkloadClusterFilename
-    ? (workloadNamespaceOptionsByCluster[activeWorkloadClusterFilename] ?? [])
+    ? (resourceNamespaceOptionsByCluster[activeWorkloadClusterFilename] ?? [])
+    : []
+  const activeConfigNamespaceOptions = activeConfigClusterFilename
+    ? (resourceNamespaceOptionsByCluster[activeConfigClusterFilename] ?? [])
     : []
 
   const loadClusters = useCallback(async () => {
@@ -135,10 +171,10 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
       }))
       setClusters(normalized)
       const validClusters = new Set(normalized.map(item => item.filename))
-      setWorkloadNamespacesByCluster(current => (
+      setResourceNamespacesByCluster(current => (
         Object.fromEntries(Object.entries(current).filter(([filename]) => validClusters.has(filename)))
       ))
-      setWorkloadNamespaceOptionsByCluster(current => (
+      setResourceNamespaceOptionsByCluster(current => (
         Object.fromEntries(Object.entries(current).filter(([filename]) => validClusters.has(filename)))
       ))
       setTabs(current => {
@@ -150,12 +186,16 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
             return []
           }
 
-          const nextId = getClusterTabId(tab.section, updatedCluster.filename, tab.workloadTab)
+          const nextId = getClusterTabId(tab.section, updatedCluster.filename, tab.workloadTab, tab.configTab)
           tabIdMap.set(tab.id, nextId)
           return [{
             ...tab,
             id: nextId,
-            title: tab.section === 'overview' ? OVERVIEW_TAB_TITLE : getWorkloadTabTitle(tab.workloadTab),
+            title: tab.section === 'overview'
+              ? OVERVIEW_TAB_TITLE
+              : tab.section === 'workloads'
+                ? getWorkloadTabTitle(tab.workloadTab)
+                : getConfigTabTitle(tab.configTab),
             cluster: updatedCluster,
           }]
         })
@@ -186,8 +226,8 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
       setClusters([])
       setTabs([])
       setActiveTabId(null)
-      setWorkloadNamespacesByCluster({})
-      setWorkloadNamespaceOptionsByCluster({})
+      setResourceNamespacesByCluster({})
+      setResourceNamespaceOptionsByCluster({})
     }
   }, [])
 
@@ -209,7 +249,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
       if (tabRequestRef.current[tab.id] !== requestId) {
         return
       }
-      setWorkloadNamespaceOptionsByCluster(current => ({
+      setResourceNamespaceOptionsByCluster(current => ({
         ...current,
         [tab.cluster.filename]: ov.namespaces ?? [],
       }))
@@ -263,54 +303,64 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
   }, [activeTabId, tabs, showSettings, loadTabData])
 
   useEffect(() => {
-    if (!activeWorkloadClusterFilename) {
+    if (!activeResourceClusterFilename) {
       return
     }
 
-    if (Object.prototype.hasOwnProperty.call(workloadNamespaceOptionsByCluster, activeWorkloadClusterFilename)) {
+    if (Object.prototype.hasOwnProperty.call(resourceNamespaceOptionsByCluster, activeResourceClusterFilename)) {
       return
     }
 
-    const namespaceSourceTab = tabs.find(tab => tab.cluster.filename === activeWorkloadClusterFilename && tab.overview)
+    const namespaceSourceTab = tabs.find(tab => tab.cluster.filename === activeResourceClusterFilename && tab.overview)
     if (namespaceSourceTab?.overview) {
-      setWorkloadNamespaceOptionsByCluster(current => ({
+      setResourceNamespaceOptionsByCluster(current => ({
         ...current,
-        [activeWorkloadClusterFilename]: namespaceSourceTab.overview?.namespaces ?? [],
+        [activeResourceClusterFilename]: namespaceSourceTab.overview?.namespaces ?? [],
       }))
       return
     }
 
     let cancelled = false
-    ConnectCluster(activeWorkloadClusterFilename, 'both').then((ov: { namespaces?: string[] }) => {
+    ConnectCluster(activeResourceClusterFilename, 'both').then((ov: { namespaces?: string[] }) => {
       if (cancelled) {
         return
       }
-      setWorkloadNamespaceOptionsByCluster(current => ({
+      setResourceNamespaceOptionsByCluster(current => ({
         ...current,
-        [activeWorkloadClusterFilename]: ov.namespaces ?? [],
+        [activeResourceClusterFilename]: ov.namespaces ?? [],
       }))
     }).catch(() => {
       if (cancelled) {
         return
       }
-      setWorkloadNamespaceOptionsByCluster(current => ({
+      setResourceNamespaceOptionsByCluster(current => ({
         ...current,
-        [activeWorkloadClusterFilename]: [],
+        [activeResourceClusterFilename]: [],
       }))
     })
 
     return () => {
       cancelled = true
     }
-  }, [activeWorkloadClusterFilename, tabs, workloadNamespaceOptionsByCluster])
+  }, [activeResourceClusterFilename, tabs, resourceNamespaceOptionsByCluster])
 
-  const handleSelectCluster = (cluster: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId) => {
+  const handleSelectCluster = (
+    cluster: ClusterInfo,
+    section: ClusterSection,
+    workloadTab?: WorkloadTabId,
+    configTab?: ConfigTabId,
+  ) => {
     if (section === 'workloads' && !workloadTab) {
       return
     }
-    const resolvedWorkloadTab = workloadTab ?? DEFAULT_WORKLOAD_TAB
-    const clusterWorkloadNamespaces = workloadNamespacesByCluster[cluster.filename] ?? []
-    const tabId = getClusterTabId(section, cluster.filename, resolvedWorkloadTab)
+    if (section === 'config' && !configTab) {
+      return
+    }
+
+    const resolvedWorkloadTab = section === 'workloads' ? (workloadTab ?? DEFAULT_WORKLOAD_TAB) : DEFAULT_WORKLOAD_TAB
+    const resolvedConfigTab = section === 'config' ? (configTab ?? DEFAULT_CONFIG_TAB) : DEFAULT_CONFIG_TAB
+    const clusterResourceNamespaces = resourceNamespacesByCluster[cluster.filename] ?? []
+    const tabId = getClusterTabId(section, cluster.filename, resolvedWorkloadTab, resolvedConfigTab)
     const now = Date.now()
     const previousSelection = previousSidebarSelectionRef.current
     const isDoubleSelect = !!previousSelection
@@ -326,8 +376,15 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           ...next[idx],
           cluster,
           workloadTab: section === 'workloads' ? resolvedWorkloadTab : next[idx].workloadTab,
-          title: section === 'overview' ? OVERVIEW_TAB_TITLE : getWorkloadTabTitle(resolvedWorkloadTab),
-          selectedNamespaces: section === 'workloads' ? clusterWorkloadNamespaces : next[idx].selectedNamespaces,
+          configTab: section === 'config' ? resolvedConfigTab : next[idx].configTab,
+          title: section === 'overview'
+            ? OVERVIEW_TAB_TITLE
+            : section === 'workloads'
+              ? getWorkloadTabTitle(resolvedWorkloadTab)
+              : getConfigTabTitle(resolvedConfigTab),
+          selectedNamespaces: (section === 'workloads' || section === 'config')
+            ? clusterResourceNamespaces
+            : next[idx].selectedNamespaces,
           hasActivity: next[idx].hasActivity || isDoubleSelect,
         }
         return next
@@ -338,7 +395,8 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           cluster,
           section,
           resolvedWorkloadTab,
-          section === 'workloads' ? clusterWorkloadNamespaces : [],
+          resolvedConfigTab,
+          (section === 'workloads' || section === 'config') ? clusterResourceNamespaces : [],
         ),
       ]
     })
@@ -412,7 +470,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     }
 
     const clusterFilename = activeTab.cluster.filename
-    setWorkloadNamespacesByCluster(current => ({
+    setResourceNamespacesByCluster(current => ({
       ...current,
       [clusterFilename]: ns,
     }))
@@ -433,6 +491,24 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     } catch {}
   }
 
+  const handleConfigNamespacesChange = async (ns: string[]) => {
+    if (!activeTab || activeTab.section !== 'config') {
+      return
+    }
+
+    const clusterFilename = activeTab.cluster.filename
+    setResourceNamespacesByCluster(current => ({
+      ...current,
+      [clusterFilename]: ns,
+    }))
+
+    setTabs(current => current.map(tab => (
+      tab.section === 'config' && tab.cluster.filename === clusterFilename
+        ? { ...tab, selectedNamespaces: ns, hasActivity: tab.id === activeTab.id ? true : tab.hasActivity }
+        : tab
+    )))
+  }
+
   const handleAddCluster = async (name: string, content: string) => {
     await AddClusterApi(name, content)
     await loadClusters()
@@ -447,7 +523,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           if (tab.cluster.filename !== oldFilename) {
             return tab
           }
-          const nextId = getClusterTabId(tab.section, newFilename, tab.workloadTab)
+          const nextId = getClusterTabId(tab.section, newFilename, tab.workloadTab, tab.configTab)
           renamedIdMap.set(tab.id, nextId)
           return {
             ...tab,
@@ -472,7 +548,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
         return nextTabs
       })
 
-      setWorkloadNamespacesByCluster(current => {
+      setResourceNamespacesByCluster(current => {
         if (!Object.prototype.hasOwnProperty.call(current, oldFilename)) {
           return current
         }
@@ -481,7 +557,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
         delete next[oldFilename]
         return next
       })
-      setWorkloadNamespaceOptionsByCluster(current => {
+      setResourceNamespaceOptionsByCluster(current => {
         if (!Object.prototype.hasOwnProperty.call(current, oldFilename)) {
           return current
         }
@@ -534,7 +610,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
         return next
       })
 
-      setWorkloadNamespacesByCluster(current => {
+      setResourceNamespacesByCluster(current => {
         if (!Object.prototype.hasOwnProperty.call(current, filename)) {
           return current
         }
@@ -542,7 +618,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
         delete next[filename]
         return next
       })
-      setWorkloadNamespaceOptionsByCluster(current => {
+      setResourceNamespaceOptionsByCluster(current => {
         if (!Object.prototype.hasOwnProperty.call(current, filename)) {
           return current
         }
@@ -569,14 +645,18 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     activeTabId,
     activeTab,
     activeWorkloadClusterFilename,
+    activeConfigClusterFilename,
     activeWorkloadNamespaces,
+    activeConfigNamespaces,
     activeWorkloadNamespaceOptions,
+    activeConfigNamespaceOptions,
     handleSelectCluster,
     handleActivateTab,
     handleCloseTab,
     handleNodeFilterChange,
     handleNamespacesChange,
     handleWorkloadNamespacesChange,
+    handleConfigNamespacesChange,
     handleAddCluster,
     handleRenameCluster,
     handleDeleteCluster,

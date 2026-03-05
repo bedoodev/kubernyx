@@ -4,7 +4,16 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 )
+
+// marshalManifest serializes a K8s object (with ManagedFields already cleared) to YAML.
+func marshalManifest(obj interface{}) string {
+	if bytes, err := yaml.Marshal(obj); err == nil {
+		return strings.TrimRight(string(bytes), "\n")
+	}
+	return "-"
+}
 
 func stringOrDefault(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {

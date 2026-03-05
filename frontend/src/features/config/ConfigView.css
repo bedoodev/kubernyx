@@ -1,0 +1,104 @@
+.config-view {
+  padding: 12px 16px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: config;
+}
+
+.config-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.config-view-title {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.config-view-title p {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-namespace-filter {
+  margin-bottom: 0;
+  margin-left: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 560px;
+}
+
+@container config (max-width: 700px) {
+  .config-view-title {
+    display: none;
+  }
+
+  .config-namespace-filter {
+    margin-left: 0;
+    max-width: none;
+  }
+}
+
+.config-namespace-filter .ns-filter-row {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.config-namespace-filter .ns-label {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.config-namespace-filter .ns-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.config-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.config-empty-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.config-empty-panel h3 {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.config-empty-panel p {
+  font-size: 13px;
+}

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { GetPodDetails } from '../../../../shared/api'
 import { toPodDetail } from '../../../../shared/utils/normalization'
 import type { PodDetail, PodResource } from '../../../../shared/types'
+import { usePollingFetch } from '../../shared/usePollingFetch'
 
 interface UsePodDetailResult {
   podDetail: PodDetail | null
@@ -10,56 +11,20 @@ interface UsePodDetailResult {
 }
 
 export function usePodDetail(clusterFilename: string, selectedPod: PodResource | null): UsePodDetailResult {
-  const [podDetail, setPodDetail] = useState<PodDetail | null>(null)
-  const [podDetailLoading, setPodDetailLoading] = useState(false)
-  const [podDetailError, setPodDetailError] = useState<string | null>(null)
-  const podDetailsRequestRef = useRef(0)
-
-  useEffect(() => {
-    if (!selectedPod) {
-      setPodDetail(null)
-      setPodDetailLoading(false)
-      setPodDetailError(null)
-      return
-    }
-
-    let active = true
-    const requestId = podDetailsRequestRef.current + 1
-    podDetailsRequestRef.current = requestId
-
-    const loadDetails = async () => {
-      setPodDetailLoading(true)
-      try {
-        const response = await GetPodDetails(clusterFilename, selectedPod.namespace, selectedPod.name)
-        if (!active || podDetailsRequestRef.current !== requestId) {
-          return
-        }
-        setPodDetail(toPodDetail(response))
-        setPodDetailError(null)
-      } catch (errorValue: unknown) {
-        if (!active || podDetailsRequestRef.current !== requestId) {
-          return
-        }
-        setPodDetail(null)
-        setPodDetailError(errorValue instanceof Error ? errorValue.message : String(errorValue))
-      } finally {
-        if (!active || podDetailsRequestRef.current !== requestId) {
-          return
-        }
-        setPodDetailLoading(false)
-      }
-    }
-
-    void loadDetails()
-    const refresh = window.setInterval(() => {
-      void loadDetails()
-    }, 5000)
-
-    return () => {
-      active = false
-      window.clearInterval(refresh)
+  const fetcher = useMemo(() => {
+    if (!selectedPod) return null
+    return async () => {
+      const response = await GetPodDetails(clusterFilename, selectedPod.namespace, selectedPod.name)
+      return toPodDetail(response)
     }
   }, [clusterFilename, selectedPod])
+
+  const { data: podDetail, loading: podDetailLoading, error: podDetailError } = usePollingFetch(
+    fetcher,
+    null as PodDetail | null,
+    5000,
+    [fetcher],
+  )
 
   return { podDetail, podDetailLoading, podDetailError }
 }
