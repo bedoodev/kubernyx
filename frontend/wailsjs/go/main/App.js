@@ -106,6 +106,10 @@ export function SetBasePath(arg1) {
   return window['go']['main']['App']['SetBasePath'](arg1);
 }
 
+export function SetCronJobSuspendResource(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetCronJobSuspendResource'](arg1, arg2, arg3, arg4);
+}
+
 export function StartPodLogsStream(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['StartPodLogsStream'](arg1, arg2, arg3, arg4);
 }
@@ -120,6 +124,10 @@ export function StopPodLogsStream() {
 
 export function StopPodsStream() {
   return window['go']['main']['App']['StopPodsStream']();
+}
+
+export function TriggerCronJobResource(arg1, arg2, arg3) {
+  return window['go']['main']['App']['TriggerCronJobResource'](arg1, arg2, arg3);
 }
 
 export function UpdateClusterConfig(arg1, arg2) {

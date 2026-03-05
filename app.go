@@ -324,6 +324,36 @@ func (a *App) ScaleWorkload(filename string, kind string, namespace string, name
 	return client.ScaleWorkload(a.ctx, kind, namespace, name, replicas)
 }
 
+// TriggerCronJobResource creates a manual job from the given cronjob template.
+func (a *App) TriggerCronJobResource(filename string, namespace string, cronJobName string) error {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.TriggerCronJob(a.ctx, namespace, cronJobName)
+}
+
+// SetCronJobSuspendResource updates cronjob suspend state.
+func (a *App) SetCronJobSuspendResource(filename string, namespace string, cronJobName string, suspend bool) error {
+	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return err
+	}
+
+	client, err := kube.NewClient(path)
+	if err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+
+	return client.SetCronJobSuspend(a.ctx, namespace, cronJobName, suspend)
+}
+
 // DeleteWorkloadResource deletes a workload controller resource by kind/namespace/name.
 func (a *App) DeleteWorkloadResource(filename string, kind string, namespace string, name string) error {
 	path, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)

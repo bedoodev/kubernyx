@@ -762,6 +762,30 @@
   flex-shrink: 0;
 }
 
+.pods-detail-header-action-btn {
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.pods-detail-header-action-btn:hover {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.pods-detail-header-action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .pods-detail-icon-btn {
   display: inline-flex;
   align-items: center;

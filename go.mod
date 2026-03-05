@@ -3,6 +3,7 @@ module kubernyx-app
 go 1.23.0
 
 require (
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/wailsapp/wails/v2 v2.11.0
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3

@@ -87,6 +87,13 @@ type DeploymentResource struct {
 	UpToDate      int32             `json:"upToDate"`
 	Available     int32             `json:"available"`
 	NodeSelector  string            `json:"nodeSelector"`
+	Completions   string            `json:"completions"`
+	Conditions    string            `json:"conditions"`
+	Schedule      string            `json:"schedule"`
+	Suspend       string            `json:"suspend"`
+	Active        int32             `json:"active"`
+	Last          string            `json:"last"`
+	Next          string            `json:"next"`
 	Status        string            `json:"status"`
 	CreatedAtUnix int64             `json:"createdAtUnix"`
 	Age           string            `json:"age"`
@@ -127,6 +134,12 @@ type DeploymentDetail struct {
 	Updated         int32                      `json:"updated"`
 	Available       int32                      `json:"available"`
 	Unavailable     int32                      `json:"unavailable"`
+	Completions     string                     `json:"completions"`
+	Schedule        string                     `json:"schedule"`
+	Suspend         bool                       `json:"suspend"`
+	Active          int32                      `json:"active"`
+	LastSchedule    string                     `json:"lastSchedule"`
+	NextSchedule    string                     `json:"nextSchedule"`
 	Age             string                     `json:"age"`
 	Created         string                     `json:"created"`
 	UID             string                     `json:"uid"`

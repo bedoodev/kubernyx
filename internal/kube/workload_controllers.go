@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	cronexpr "github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -560,15 +561,16 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 			}
 			for _, item := range list.Items {
 				parallelism := replicasFromPointer(item.Spec.Parallelism, 1)
-				completions := "-"
+				completionsTarget := int32(1)
 				if item.Spec.Completions != nil {
-					completions = fmt.Sprintf("%d", *item.Spec.Completions)
+					completionsTarget = *item.Spec.Completions
 				}
+				completionsSummary := fmt.Sprintf("%d/%d", item.Status.Succeeded, completionsTarget)
 				labels, annotations := copyLabelsAndAnnotations(item.Labels, item.Annotations)
 				items = append(items, DeploymentResource{
 					Name:          item.Name,
 					Namespace:     item.Namespace,
-					Pods:          fmt.Sprintf("%d/%s", item.Status.Succeeded, completions),
+					Pods:          fmt.Sprintf("%d/%d", item.Status.Succeeded, completionsTarget),
 					Replicas:      parallelism,
 					Desired:       parallelism,
 					Current:       item.Status.Active,
@@ -576,6 +578,8 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					UpToDate:      int32(item.Status.Succeeded),
 					Available:     int32(item.Status.Succeeded),
 					NodeSelector:  formatNodeSelectorMap(item.Spec.Template.Spec.NodeSelector),
+					Completions:   completionsSummary,
+					Conditions:    jobConditionsSummary(&item),
 					Status:        jobStatusLabel(&item),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -590,6 +594,8 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 			}
 			for _, item := range list.Items {
 				active := int32(len(item.Status.Active))
+				suspended := item.Spec.Suspend != nil && *item.Spec.Suspend
+				nextSchedule := cronJobNextSchedule(item.Spec.Schedule, item.Spec.TimeZone)
 				labels, annotations := copyLabelsAndAnnotations(item.Labels, item.Annotations)
 				items = append(items, DeploymentResource{
 					Name:          item.Name,
@@ -602,6 +608,11 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					UpToDate:      active,
 					Available:     active,
 					NodeSelector:  formatNodeSelectorMap(item.Spec.JobTemplate.Spec.Template.Spec.NodeSelector),
+					Schedule:      stringOrDefault(item.Spec.Schedule, "-"),
+					Suspend:       map[bool]string{true: "Yes", false: "No"}[suspended],
+					Active:        active,
+					Last:          formatMetaTime(item.Status.LastScheduleTime),
+					Next:          nextSchedule,
 					Status:        cronJobStatusLabel(&item),
 					CreatedAtUnix: item.CreationTimestamp.Time.Unix(),
 					Age:           formatAge(time.Since(item.CreationTimestamp.Time)),
@@ -966,6 +977,67 @@ func (c *Client) DeleteWorkload(ctx context.Context, kind string, namespace stri
 	}
 }
 
+func (c *Client) TriggerCronJob(ctx context.Context, namespace string, name string) error {
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("cronjob name is required")
+	}
+
+	cronJob, err := c.clientset.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get cronjob: %w", err)
+	}
+
+	generatePrefix := fmt.Sprintf("%s-manual-", cronJob.Name)
+	labels := map[string]string{}
+	for key, value := range cronJob.Spec.JobTemplate.Labels {
+		labels[key] = value
+	}
+	annotations := map[string]string{}
+	for key, value := range cronJob.Spec.JobTemplate.Annotations {
+		annotations[key] = value
+	}
+	annotations["cronjob.kubernetes.io/instantiate"] = "manual"
+
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName:    generatePrefix,
+			Namespace:       namespace,
+			Labels:          labels,
+			Annotations:     annotations,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(cronJob, batchv1.SchemeGroupVersion.WithKind("CronJob"))},
+		},
+		Spec: *cronJob.Spec.JobTemplate.Spec.DeepCopy(),
+	}
+
+	if _, createErr := c.clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{}); createErr != nil {
+		return fmt.Errorf("failed to trigger cronjob: %w", createErr)
+	}
+	return nil
+}
+
+func (c *Client) SetCronJobSuspend(ctx context.Context, namespace string, name string, suspend bool) error {
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("cronjob name is required")
+	}
+
+	cronJob, err := c.clientset.BatchV1().CronJobs(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get cronjob: %w", err)
+	}
+
+	cronJob.Spec.Suspend = &suspend
+	if _, updateErr := c.clientset.BatchV1().CronJobs(namespace).Update(ctx, cronJob, metav1.UpdateOptions{}); updateErr != nil {
+		return fmt.Errorf("failed to update cronjob suspend state: %w", updateErr)
+	}
+	return nil
+}
+
 func (c *Client) getDaemonSetDetail(ctx context.Context, namespace string, name string) (*DeploymentDetail, error) {
 	daemonSet, err := c.clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -1194,6 +1266,11 @@ func (c *Client) getJobDetail(ctx context.Context, namespace string, name string
 	}
 
 	parallelism := replicasFromPointer(job.Spec.Parallelism, 1)
+	completionsTarget := int32(1)
+	if job.Spec.Completions != nil {
+		completionsTarget = *job.Spec.Completions
+	}
+	completionsSummary := fmt.Sprintf("%d/%d", job.Status.Succeeded, completionsTarget)
 	return &DeploymentDetail{
 		Name:            job.Name,
 		Namespace:       job.Namespace,
@@ -1204,6 +1281,8 @@ func (c *Client) getJobDetail(ctx context.Context, namespace string, name string
 		Updated:         int32(job.Status.Succeeded),
 		Available:       int32(job.Status.Succeeded),
 		Unavailable:     int32(job.Status.Failed),
+		Completions:     completionsSummary,
+		Active:          job.Status.Active,
 		Age:             formatAge(time.Since(job.CreationTimestamp.Time)),
 		Created:         job.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
 		UID:             stringOrDefault(string(job.UID), "-"),
@@ -1309,6 +1388,7 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 	}
 
 	activeCount := int32(len(cronJob.Status.Active))
+	suspend := cronJob.Spec.Suspend != nil && *cronJob.Spec.Suspend
 	return &DeploymentDetail{
 		Name:            cronJob.Name,
 		Namespace:       cronJob.Namespace,
@@ -1319,6 +1399,11 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 		Updated:         int32(len(ownedJobs)),
 		Available:       activeCount,
 		Unavailable:     0,
+		Schedule:        stringOrDefault(cronJob.Spec.Schedule, "-"),
+		Suspend:         suspend,
+		Active:          activeCount,
+		LastSchedule:    formatMetaTime(cronJob.Status.LastScheduleTime),
+		NextSchedule:    cronJobNextSchedule(cronJob.Spec.Schedule, cronJob.Spec.TimeZone),
 		Age:             formatAge(time.Since(cronJob.CreationTimestamp.Time)),
 		Created:         cronJob.CreationTimestamp.Time.UTC().Format("2006-01-02 15:04:05.000 MST"),
 		UID:             stringOrDefault(string(cronJob.UID), "-"),
@@ -1339,6 +1424,86 @@ func (c *Client) getCronJobDetail(ctx context.Context, namespace string, name st
 		Manifest:        manifest,
 		ScaleSupported:  false,
 	}, nil
+}
+
+func formatMetaTime(value *metav1.Time) string {
+	if value == nil || value.Time.IsZero() {
+		return "-"
+	}
+	return value.Time.UTC().Format("2006-01-02 15:04:05.000 MST")
+}
+
+func jobConditionsSummary(job *batchv1.Job) string {
+	if len(job.Status.Conditions) == 0 {
+		return "-"
+	}
+
+	priority := map[string]int{
+		"FailureTarget":      1,
+		"Failed":             2,
+		"Complete":           3,
+		"SuccessCriteriaMet": 4,
+		"Suspended":          5,
+	}
+
+	sort.SliceStable(job.Status.Conditions, func(i, j int) bool {
+		left := job.Status.Conditions[i]
+		right := job.Status.Conditions[j]
+		leftPriority, leftOK := priority[string(left.Type)]
+		rightPriority, rightOK := priority[string(right.Type)]
+		if !leftOK {
+			leftPriority = 100
+		}
+		if !rightOK {
+			rightPriority = 100
+		}
+		if leftPriority != rightPriority {
+			return leftPriority < rightPriority
+		}
+		if left.LastTransitionTime.Time.Equal(right.LastTransitionTime.Time) {
+			return left.Type < right.Type
+		}
+		return left.LastTransitionTime.Time.After(right.LastTransitionTime.Time)
+	})
+
+	items := make([]string, 0, len(job.Status.Conditions))
+	for _, condition := range job.Status.Conditions {
+		if condition.Status == corev1.ConditionTrue {
+			items = append(items, string(condition.Type))
+		}
+	}
+	if len(items) == 0 {
+		return "-"
+	}
+	return strings.Join(items, ", ")
+}
+
+func cronJobNextSchedule(schedule string, timezone *string) string {
+	trimmed := strings.TrimSpace(schedule)
+	if trimmed == "" {
+		return "-"
+	}
+
+	parser := cronexpr.NewParser(
+		cronexpr.Minute | cronexpr.Hour | cronexpr.Dom | cronexpr.Month | cronexpr.Dow | cronexpr.Descriptor,
+	)
+	parsed, err := parser.Parse(trimmed)
+	if err != nil {
+		return "-"
+	}
+
+	location := time.UTC
+	if timezone != nil && strings.TrimSpace(*timezone) != "" {
+		if loaded, loadErr := time.LoadLocation(strings.TrimSpace(*timezone)); loadErr == nil {
+			location = loaded
+		}
+	}
+
+	next := parsed.Next(time.Now().In(location))
+	if next.IsZero() {
+		return "-"
+	}
+	return next.UTC().Format("2006-01-02 15:04:05.000 MST")
 }
 
 func jobStatusLabel(job *batchv1.Job) string {

@@ -24,6 +24,7 @@ export {
   UpdateWorkloadManifest,
   ScaleDeployment,
   ScaleWorkload,
+  SetCronJobSuspendResource,
   GetPodDetails,
   GetPodLogs,
   ExecPodCommand,
@@ -32,6 +33,7 @@ export {
   StartPodsStream,
   StopPodLogsStream,
   StopPodsStream,
+  TriggerCronJobResource,
 } from '../../../wailsjs/go/main/App'
 
 export { EventsOn } from '../../../wailsjs/runtime/runtime'

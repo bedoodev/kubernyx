@@ -30,6 +30,13 @@ type DeploymentColumnKey =
   | 'upToDate'
   | 'available'
   | 'nodeSelector'
+  | 'completions'
+  | 'conditions'
+  | 'schedule'
+  | 'suspend'
+  | 'active'
+  | 'last'
+  | 'next'
   | 'status'
   | 'age'
 
@@ -52,6 +59,13 @@ const DEPLOYMENT_COLUMNS: DeploymentColumn[] = [
   { key: 'upToDate', label: 'Up-to-date', minWidth: 100, defaultWidth: 140, maxWidth: 240 },
   { key: 'available', label: 'Available', minWidth: 100, defaultWidth: 130, maxWidth: 220 },
   { key: 'nodeSelector', label: 'Node Selector', minWidth: 180, defaultWidth: 280, maxWidth: 620 },
+  { key: 'completions', label: 'Completions', minWidth: 120, defaultWidth: 160, maxWidth: 280 },
+  { key: 'conditions', label: 'Conditions', minWidth: 140, defaultWidth: 220, maxWidth: 420 },
+  { key: 'schedule', label: 'Schedule', minWidth: 140, defaultWidth: 220, maxWidth: 380 },
+  { key: 'suspend', label: 'Suspend', minWidth: 100, defaultWidth: 130, maxWidth: 220 },
+  { key: 'active', label: 'Active', minWidth: 90, defaultWidth: 120, maxWidth: 220 },
+  { key: 'last', label: 'Last', minWidth: 150, defaultWidth: 220, maxWidth: 360 },
+  { key: 'next', label: 'Next', minWidth: 150, defaultWidth: 220, maxWidth: 360 },
   { key: 'status', label: 'Status', minWidth: 140, defaultWidth: 210, maxWidth: 320 },
   { key: 'age', label: 'Age', minWidth: 80, defaultWidth: 110, maxWidth: 180 },
 ]
@@ -65,6 +79,42 @@ const DAEMON_SET_COLUMNS: DeploymentColumnKey[] = [
   'upToDate',
   'available',
   'nodeSelector',
+  'age',
+]
+
+const STATEFUL_SET_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'pods',
+  'replicas',
+  'age',
+]
+
+const REPLICA_SET_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'desired',
+  'current',
+  'ready',
+  'age',
+]
+
+const JOB_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'completions',
+  'conditions',
+  'age',
+]
+
+const CRONJOB_COLUMNS: DeploymentColumnKey[] = [
+  'name',
+  'namespace',
+  'schedule',
+  'suspend',
+  'active',
+  'last',
+  'next',
   'age',
 ]
 
@@ -122,7 +172,22 @@ export default function DeploymentsTable({
 }: Props) {
   const { items, loading, error } = useDeployments(clusterFilename, selectedNamespaces, workloadTab)
   const pluralLabel = workloadPluralLabel(workloadTab)
-  const visibleColumnKeys = workloadTab === 'daemon-sets' ? DAEMON_SET_COLUMNS : DEFAULT_WORKLOAD_COLUMNS
+  const visibleColumnKeys = useMemo(() => {
+    switch (workloadTab) {
+      case 'daemon-sets':
+        return DAEMON_SET_COLUMNS
+      case 'stateful-sets':
+        return STATEFUL_SET_COLUMNS
+      case 'replica-sets':
+        return REPLICA_SET_COLUMNS
+      case 'jobs':
+        return JOB_COLUMNS
+      case 'cronjobs':
+        return CRONJOB_COLUMNS
+      default:
+        return DEFAULT_WORKLOAD_COLUMNS
+    }
+  }, [workloadTab])
   const columnByKey = useMemo(
     () => new Map(DEPLOYMENT_COLUMNS.map(column => [column.key, column])),
     [],
@@ -234,6 +299,13 @@ export default function DeploymentsTable({
         || String(item.upToDate ?? '').toLowerCase().includes(query)
         || String(item.available ?? '').toLowerCase().includes(query)
         || String(item.nodeSelector ?? '').toLowerCase().includes(query)
+        || String(item.completions ?? '').toLowerCase().includes(query)
+        || String(item.conditions ?? '').toLowerCase().includes(query)
+        || String(item.schedule ?? '').toLowerCase().includes(query)
+        || String(item.suspend ?? '').toLowerCase().includes(query)
+        || String(item.active ?? '').toLowerCase().includes(query)
+        || String(item.last ?? '').toLowerCase().includes(query)
+        || String(item.next ?? '').toLowerCase().includes(query)
       ) {
         return true
       }
@@ -285,6 +357,20 @@ export default function DeploymentsTable({
           return direction * ((left.available ?? 0) - (right.available ?? 0))
         case 'nodeSelector':
           return direction * (left.nodeSelector ?? '').localeCompare(right.nodeSelector ?? '')
+        case 'completions':
+          return direction * (left.completions ?? '').localeCompare(right.completions ?? '')
+        case 'conditions':
+          return direction * (left.conditions ?? '').localeCompare(right.conditions ?? '')
+        case 'schedule':
+          return direction * (left.schedule ?? '').localeCompare(right.schedule ?? '')
+        case 'suspend':
+          return direction * (left.suspend ?? '').localeCompare(right.suspend ?? '')
+        case 'active':
+          return direction * ((left.active ?? 0) - (right.active ?? 0))
+        case 'last':
+          return direction * (left.last ?? '').localeCompare(right.last ?? '')
+        case 'next':
+          return direction * (left.next ?? '').localeCompare(right.next ?? '')
         case 'status':
           return direction * left.status.localeCompare(right.status)
         case 'age':
@@ -528,6 +614,20 @@ export default function DeploymentsTable({
                               return <td key={column.key} className="pods-cell" title={String(item.available ?? 0)}>{item.available ?? 0}</td>
                             case 'nodeSelector':
                               return <td key={column.key} className="pods-cell" title={item.nodeSelector ?? '-'}>{item.nodeSelector ?? '-'}</td>
+                            case 'completions':
+                              return <td key={column.key} className="pods-cell" title={item.completions ?? '-'}>{item.completions ?? '-'}</td>
+                            case 'conditions':
+                              return <td key={column.key} className="pods-cell" title={item.conditions ?? '-'}>{item.conditions ?? '-'}</td>
+                            case 'schedule':
+                              return <td key={column.key} className="pods-cell" title={item.schedule ?? '-'}>{item.schedule ?? '-'}</td>
+                            case 'suspend':
+                              return <td key={column.key} className="pods-cell" title={item.suspend ?? '-'}>{item.suspend ?? '-'}</td>
+                            case 'active':
+                              return <td key={column.key} className="pods-cell" title={String(item.active ?? 0)}>{item.active ?? 0}</td>
+                            case 'last':
+                              return <td key={column.key} className="pods-cell" title={item.last ?? '-'}>{item.last ?? '-'}</td>
+                            case 'next':
+                              return <td key={column.key} className="pods-cell" title={item.next ?? '-'}>{item.next ?? '-'}</td>
                             case 'status':
                               return (
                                 <td key={column.key}>

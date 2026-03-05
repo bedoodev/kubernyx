@@ -9,6 +9,13 @@ export interface DeploymentResource {
   upToDate?: number;
   available?: number;
   nodeSelector?: string;
+  completions?: string;
+  conditions?: string;
+  schedule?: string;
+  suspend?: string;
+  active?: number;
+  last?: string;
+  next?: string;
   status: string;
   createdAtUnix?: number;
   age?: string;
@@ -52,6 +59,12 @@ export interface DeploymentDetail {
   updated: number;
   available: number;
   unavailable: number;
+  completions?: string;
+  schedule?: string;
+  suspend?: boolean;
+  active?: number;
+  lastSchedule?: string;
+  nextSchedule?: string;
   age: string;
   created: string;
   uid: string;

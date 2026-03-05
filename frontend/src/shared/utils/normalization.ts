@@ -24,6 +24,11 @@ export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
 export function normalizeWorkloads(data: unknown): WorkloadCounts {
   const record = (data ?? {}) as Record<string, unknown>
   const statuses = normalizeWorkloadStatuses(record)
+  const suspendRaw = record.suspend
+  const suspend = typeof suspendRaw === 'boolean'
+    ? suspendRaw
+    : String(suspendRaw ?? '').toLowerCase() === 'true'
+
   return {
     pods: Number(record.pods ?? 0),
     podRunning: statuses.pods.running,
@@ -323,6 +328,13 @@ export function toDeploymentResources(data: unknown): DeploymentResource[] {
       upToDate: Number(record.upToDate ?? 0),
       available: Number(record.available ?? 0),
       nodeSelector: String(record.nodeSelector ?? '-'),
+      completions: String(record.completions ?? '-'),
+      conditions: String(record.conditions ?? '-'),
+      schedule: String(record.schedule ?? '-'),
+      suspend: String(record.suspend ?? '-'),
+      active: Number(record.active ?? 0),
+      last: String(record.last ?? '-'),
+      next: String(record.next ?? '-'),
       status: String(record.status ?? ''),
       createdAtUnix: Number(record.createdAtUnix ?? 0),
       age: String(record.age ?? '-'),
@@ -409,6 +421,10 @@ export function toDeploymentDetail(data: unknown): DeploymentDetail {
   const podAntiAffinities = Array.isArray(record.podAntiAffinities)
     ? record.podAntiAffinities.map(item => String(item ?? '-'))
     : []
+  const suspendRaw = record.suspend
+  const suspend = typeof suspendRaw === 'boolean'
+    ? suspendRaw
+    : String(suspendRaw ?? '').toLowerCase() === 'true'
 
   return {
     name: String(record.name ?? ''),
@@ -420,6 +436,12 @@ export function toDeploymentDetail(data: unknown): DeploymentDetail {
     updated: Number(record.updated ?? 0),
     available: Number(record.available ?? 0),
     unavailable: Number(record.unavailable ?? 0),
+    completions: String(record.completions ?? '-'),
+    schedule: String(record.schedule ?? '-'),
+    suspend,
+    active: Number(record.active ?? 0),
+    lastSchedule: String(record.lastSchedule ?? '-'),
+    nextSchedule: String(record.nextSchedule ?? '-'),
     age: String(record.age ?? '-'),
     created: String(record.created ?? '-'),
     uid: String(record.uid ?? '-'),

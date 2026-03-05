@@ -5,6 +5,8 @@ import {
   DeleteWorkloadResource,
   ScaleDeployment,
   ScaleWorkload,
+  SetCronJobSuspendResource,
+  TriggerCronJobResource,
   UpdateDeploymentManifest,
   UpdateWorkloadManifest,
 } from '../../../../shared/api'
@@ -46,6 +48,34 @@ const DAEMON_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string 
   { id: 'metadata', label: 'Metadata' },
   { id: 'logs', label: 'Logs' },
   { id: 'yaml', label: 'YAML' },
+]
+
+const STATEFUL_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'yaml', label: 'YAML' },
+]
+
+const REPLICA_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'scale', label: 'Scale' },
+  { id: 'yaml', label: 'Edit' },
+]
+
+const JOB_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'logs', label: 'Logs' },
+  { id: 'yaml', label: 'Manifest' },
+]
+
+const CRONJOB_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'metadata', label: 'Metadata' },
+  { id: 'yaml', label: 'Edit' },
 ]
 
 const LOGS_ALL_PODS = '__all_pods__'
@@ -259,6 +289,9 @@ export default function DeploymentDetailPanel({
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [cronActionPending, setCronActionPending] = useState(false)
+  const [cronActionError, setCronActionError] = useState<string | null>(null)
+  const [cronActionInfo, setCronActionInfo] = useState<string | null>(null)
 
   const [scaleValue, setScaleValue] = useState(String(selectedDeployment.replicas ?? 0))
   const [scaleSaving, setScaleSaving] = useState(false)
@@ -282,13 +315,27 @@ export default function DeploymentDetailPanel({
   const deploymentKey = `${workloadTab}:${selectedDeployment.namespace}/${selectedDeployment.name}`
   const workloadLabel = workloadSingularLabel(workloadTab)
   const isDaemonSet = workloadTab === 'daemon-sets'
-  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments'))
+  const isJob = workloadTab === 'jobs'
+  const isCronJob = workloadTab === 'cronjobs'
+  const isCronSuspended = deploymentDetail?.suspend ?? ((selectedDeployment.suspend ?? '').toLowerCase() === 'yes')
+  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments' || workloadTab === 'stateful-sets' || workloadTab === 'replica-sets'))
   const detailTabs = useMemo(
     () => {
-      const base = isDaemonSet ? DAEMON_SET_DETAIL_TABS : DETAIL_TABS_BASE
+      let base = DETAIL_TABS_BASE
+      if (workloadTab === 'daemon-sets') {
+        base = DAEMON_SET_DETAIL_TABS
+      } else if (workloadTab === 'stateful-sets') {
+        base = STATEFUL_SET_DETAIL_TABS
+      } else if (workloadTab === 'replica-sets') {
+        base = REPLICA_SET_DETAIL_TABS
+      } else if (workloadTab === 'jobs') {
+        base = JOB_DETAIL_TABS
+      } else if (workloadTab === 'cronjobs') {
+        base = CRONJOB_DETAIL_TABS
+      }
       return base.filter(tab => scaleSupported || tab.id !== 'scale')
     },
-    [isDaemonSet, scaleSupported],
+    [workloadTab, scaleSupported],
   )
 
   useEffect(() => {
@@ -324,6 +371,9 @@ export default function DeploymentDetailPanel({
     setYamlSaving(false)
     setDeletePending(false)
     setDeleteError(null)
+    setCronActionPending(false)
+    setCronActionError(null)
+    setCronActionInfo(null)
     setScaleError(null)
     setScaleSaving(false)
     setLogsPodFilter(LOGS_ALL_PODS)
@@ -456,6 +506,13 @@ export default function DeploymentDetailPanel({
   const overviewUpdated = deploymentDetail?.updated ?? selectedDeployment.upToDate ?? 0
   const overviewAvailable = deploymentDetail?.available ?? selectedDeployment.available ?? 0
   const overviewUnavailable = deploymentDetail?.unavailable ?? 0
+  const overviewCompletions = deploymentDetail?.completions ?? selectedDeployment.completions ?? '-'
+  const overviewConditionsSummary = metadataConditions.map(condition => condition.type).join(', ') || selectedDeployment.conditions || '-'
+  const overviewSchedule = deploymentDetail?.schedule ?? selectedDeployment.schedule ?? '-'
+  const overviewSuspend = deploymentDetail?.suspend ?? ((selectedDeployment.suspend ?? '').toLowerCase() === 'yes')
+  const overviewActive = deploymentDetail?.active ?? selectedDeployment.active ?? 0
+  const overviewLastSchedule = deploymentDetail?.lastSchedule ?? selectedDeployment.last ?? '-'
+  const overviewNextSchedule = deploymentDetail?.nextSchedule ?? selectedDeployment.next ?? '-'
   const overviewNodeSelector = deploymentDetail?.nodeSelector
   const overviewNodeSelectorText = (selectedDeployment.nodeSelector && selectedDeployment.nodeSelector !== '-')
     ? selectedDeployment.nodeSelector
@@ -583,6 +640,48 @@ export default function DeploymentDetailPanel({
       setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
     }).finally(() => {
       setDeletePending(false)
+    })
+  }
+
+  const triggerCronJob = () => {
+    if (!isCronJob || cronActionPending) {
+      return
+    }
+    setCronActionPending(true)
+    setCronActionError(null)
+    setCronActionInfo(null)
+    void TriggerCronJobResource(
+      clusterFilename,
+      selectedDeployment.namespace,
+      selectedDeployment.name,
+    ).then(() => {
+      setCronActionInfo(`CronJob "${selectedDeployment.name}" triggered successfully.`)
+    }).catch((errorValue: unknown) => {
+      setCronActionError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setCronActionPending(false)
+    })
+  }
+
+  const toggleCronJobSuspend = () => {
+    if (!isCronJob || cronActionPending) {
+      return
+    }
+    const nextSuspend = !isCronSuspended
+    setCronActionPending(true)
+    setCronActionError(null)
+    setCronActionInfo(null)
+    void SetCronJobSuspendResource(
+      clusterFilename,
+      selectedDeployment.namespace,
+      selectedDeployment.name,
+      nextSuspend,
+    ).then(() => {
+      setCronActionInfo(nextSuspend ? 'CronJob suspended.' : 'CronJob resumed.')
+    }).catch((errorValue: unknown) => {
+      setCronActionError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setCronActionPending(false)
     })
   }
 
@@ -908,6 +1007,28 @@ export default function DeploymentDetailPanel({
           <p>{selectedDeployment.namespace}</p>
         </div>
         <div className="pods-detail-actions">
+          {isCronJob && (
+            <>
+              <button
+                type="button"
+                className="pods-detail-header-action-btn"
+                onClick={triggerCronJob}
+                disabled={cronActionPending}
+                title="Trigger CronJob now"
+              >
+                Trigger
+              </button>
+              <button
+                type="button"
+                className="pods-detail-header-action-btn"
+                onClick={toggleCronJobSuspend}
+                disabled={cronActionPending}
+                title={isCronSuspended ? 'Resume CronJob' : 'Suspend CronJob'}
+              >
+                {isCronSuspended ? 'Resume' : 'Suspend'}
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="pods-detail-icon-btn danger"
@@ -970,6 +1091,12 @@ export default function DeploymentDetailPanel({
       <div className={`pods-detail-body ${activeDetailsTab === 'yaml' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : ''}`}>
         {deleteError && (
           <div className="pods-detail-alert error">{deleteError}</div>
+        )}
+        {cronActionError && (
+          <div className="pods-detail-alert error">{cronActionError}</div>
+        )}
+        {cronActionInfo && (
+          <div className="pods-detail-alert info">{cronActionInfo}</div>
         )}
         {(deploymentDetailError && activeDetailsTab !== 'logs') ? (
           <div className="pods-detail-alert error">{deploymentDetailError}</div>
@@ -1256,39 +1383,89 @@ export default function DeploymentDetailPanel({
                   <span className={`pods-status-pill ${parsePhase(overviewStatus).toLowerCase()}`}>{overviewStatus}</span>
                 </strong>
               </div>
-              <div className="pods-overview-card">
-                <span>{isDaemonSet ? 'Desired' : 'Replicas'}</span>
-                <strong>{overviewReplicas}</strong>
-              </div>
-              {isDaemonSet && (
-                <div className="pods-overview-card">
-                  <span>Current</span>
-                  <strong>{overviewCurrent}</strong>
-                </div>
-              )}
-              <div className="pods-overview-card">
-                <span>Ready</span>
-                <strong>{overviewReady}</strong>
-              </div>
-              <div className="pods-overview-card">
-                <span>{isDaemonSet ? 'Up-to-date' : 'Updated'}</span>
-                <strong>{overviewUpdated}</strong>
-              </div>
-              <div className="pods-overview-card">
-                <span>Available</span>
-                <strong>{overviewAvailable}</strong>
-              </div>
-              {!isDaemonSet && (
-                <div className="pods-overview-card">
-                  <span>Unavailable</span>
-                  <strong>{overviewUnavailable}</strong>
-                </div>
-              )}
-              {isDaemonSet && (
-                <div className="pods-overview-card is-full">
-                  <span>Node Selector</span>
-                  <strong>{overviewNodeSelectorText}</strong>
-                </div>
+              {isCronJob ? (
+                <>
+                  <div className="pods-overview-card">
+                    <span>Schedule</span>
+                    <strong>{overviewSchedule}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Suspend</span>
+                    <strong>{overviewSuspend ? 'Yes' : 'No'}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Active</span>
+                    <strong>{overviewActive}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Last</span>
+                    <strong>{overviewLastSchedule}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Next</span>
+                    <strong>{overviewNextSchedule}</strong>
+                  </div>
+                </>
+              ) : isJob ? (
+                <>
+                  <div className="pods-overview-card">
+                    <span>Completions</span>
+                    <strong>{overviewCompletions}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Conditions</span>
+                    <strong>{overviewConditionsSummary || '-'}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Active</span>
+                    <strong>{overviewActive}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Succeeded</span>
+                    <strong>{overviewAvailable}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Failed</span>
+                    <strong>{overviewUnavailable}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="pods-overview-card">
+                    <span>{isDaemonSet ? 'Desired' : 'Replicas'}</span>
+                    <strong>{overviewReplicas}</strong>
+                  </div>
+                  {isDaemonSet && (
+                    <div className="pods-overview-card">
+                      <span>Current</span>
+                      <strong>{overviewCurrent}</strong>
+                    </div>
+                  )}
+                  <div className="pods-overview-card">
+                    <span>Ready</span>
+                    <strong>{overviewReady}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>{isDaemonSet ? 'Up-to-date' : 'Updated'}</span>
+                    <strong>{overviewUpdated}</strong>
+                  </div>
+                  <div className="pods-overview-card">
+                    <span>Available</span>
+                    <strong>{overviewAvailable}</strong>
+                  </div>
+                  {!isDaemonSet && (
+                    <div className="pods-overview-card">
+                      <span>Unavailable</span>
+                      <strong>{overviewUnavailable}</strong>
+                    </div>
+                  )}
+                  {isDaemonSet && (
+                    <div className="pods-overview-card is-full">
+                      <span>Node Selector</span>
+                      <strong>{overviewNodeSelectorText}</strong>
+                    </div>
+                  )}
+                </>
               )}
               <div className="pods-overview-card">
                 <span>Age</span>
@@ -1304,17 +1481,23 @@ export default function DeploymentDetailPanel({
               </div>
             </div>
 
-            {!isDaemonSet && (
+            {!isDaemonSet && !isJob && (
               <section className="pods-detail-section">
-                <h5>{workloadTab === 'deployments' ? 'Deploy Revisions' : 'Revisions'}</h5>
+                <h5>
+                  {isCronJob
+                    ? 'Job History'
+                    : workloadTab === 'deployments'
+                      ? 'Deploy Revisions'
+                      : 'Revisions'}
+                </h5>
                 <div className="pods-detail-table-wrap">
                   <table className="pods-detail-table">
                     <thead>
                       <tr>
-                        <th>Revision</th>
-                        <th>ReplicaSet</th>
-                        <th>Replicas</th>
-                        <th>Ready</th>
+                        <th>{isCronJob ? 'Run' : 'Revision'}</th>
+                        <th>{isCronJob ? 'Job' : 'ReplicaSet'}</th>
+                        <th>{isCronJob ? 'Active' : 'Replicas'}</th>
+                        <th>{isCronJob ? 'Succeeded' : 'Ready'}</th>
                         <th>Age</th>
                       </tr>
                     </thead>
@@ -1340,7 +1523,8 @@ export default function DeploymentDetailPanel({
               </section>
             )}
 
-            <section className="pods-detail-section">
+            {!isCronJob && (
+              <section className="pods-detail-section">
               <h5>Pods</h5>
               <div className="pods-detail-table-wrap">
                 <table className="pods-detail-table">
@@ -1378,7 +1562,8 @@ export default function DeploymentDetailPanel({
                   </tbody>
                 </table>
               </div>
-            </section>
+              </section>
+            )}
 
             <section className="pods-detail-section">
               <h5>Events</h5>
