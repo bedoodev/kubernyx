@@ -10,6 +10,10 @@ export function ConnectCluster(arg1, arg2) {
   return window['go']['main']['App']['ConnectCluster'](arg1, arg2);
 }
 
+export function DebugNode(arg1, arg2) {
+  return window['go']['main']['App']['DebugNode'](arg1, arg2);
+}
+
 export function DeleteCluster(arg1) {
   return window['go']['main']['App']['DeleteCluster'](arg1);
 }
@@ -38,6 +42,10 @@ export function GetClusterConfig(arg1) {
   return window['go']['main']['App']['GetClusterConfig'](arg1);
 }
 
+export function GetClusterEvents(arg1, arg2) {
+  return window['go']['main']['App']['GetClusterEvents'](arg1, arg2);
+}
+
 export function GetDeploymentDetails(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetDeploymentDetails'](arg1, arg2, arg3);
 }
@@ -48,6 +56,14 @@ export function GetDeploymentLogs(arg1, arg2, arg3, arg4) {
 
 export function GetDeploymentResources(arg1, arg2) {
   return window['go']['main']['App']['GetDeploymentResources'](arg1, arg2);
+}
+
+export function GetNodeDetail(arg1, arg2) {
+  return window['go']['main']['App']['GetNodeDetail'](arg1, arg2);
+}
+
+export function GetNodeResources(arg1) {
+  return window['go']['main']['App']['GetNodeResources'](arg1);
 }
 
 export function GetPodDetails(arg1, arg2, arg3) {
@@ -84,6 +100,10 @@ export function RefreshOverview(arg1) {
 
 export function RenameCluster(arg1, arg2) {
   return window['go']['main']['App']['RenameCluster'](arg1, arg2);
+}
+
+export function RestartWorkload(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RestartWorkload'](arg1, arg2, arg3, arg4);
 }
 
 export function SavePodLogsFile(arg1, arg2) {

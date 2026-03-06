@@ -34,6 +34,11 @@ export {
   StopPodLogsStream,
   StopPodsStream,
   TriggerCronJobResource,
+  GetNodeResources,
+  GetNodeDetail,
+  DebugNode,
+  GetClusterEvents,
+  RestartWorkload,
 } from '../../../wailsjs/go/main/App'
 
 export { EventsOn } from '../../../wailsjs/runtime/runtime'

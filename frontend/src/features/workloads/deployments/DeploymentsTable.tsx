@@ -90,15 +90,6 @@ const STATEFUL_SET_COLUMNS: DeploymentColumnKey[] = [
   'age',
 ]
 
-const REPLICA_SET_COLUMNS: DeploymentColumnKey[] = [
-  'name',
-  'namespace',
-  'desired',
-  'current',
-  'ready',
-  'age',
-]
-
 const JOB_COLUMNS: DeploymentColumnKey[] = [
   'name',
   'namespace',
@@ -178,8 +169,6 @@ export default function DeploymentsTable({
         return DAEMON_SET_COLUMNS
       case 'stateful-sets':
         return STATEFUL_SET_COLUMNS
-      case 'replica-sets':
-        return REPLICA_SET_COLUMNS
       case 'jobs':
         return JOB_COLUMNS
       case 'cronjobs':

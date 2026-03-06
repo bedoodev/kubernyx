@@ -29,6 +29,8 @@ const (
 	workloadControllerCronJob    workloadControllerKind = "cronjob"
 	workloadControllerConfigMap  workloadControllerKind = "configmap"
 	workloadControllerSecret     workloadControllerKind = "secret"
+	workloadControllerService    workloadControllerKind = "service"
+	workloadControllerIngress    workloadControllerKind = "ingress"
 )
 
 func parseWorkloadControllerKind(kind string) (workloadControllerKind, error) {
@@ -49,6 +51,10 @@ func parseWorkloadControllerKind(kind string) (workloadControllerKind, error) {
 		return workloadControllerConfigMap, nil
 	case string(workloadControllerSecret):
 		return workloadControllerSecret, nil
+	case string(workloadControllerService):
+		return workloadControllerService, nil
+	case string(workloadControllerIngress):
+		return workloadControllerIngress, nil
 	default:
 		return "", fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -694,6 +700,10 @@ func (c *Client) GetWorkloadResources(ctx context.Context, kind string, namespac
 					Annotations:   annotations,
 				})
 			}
+		case workloadControllerService:
+			return c.GetServiceResources(ctx, selectedNamespaces)
+		case workloadControllerIngress:
+			return c.GetIngressResources(ctx, selectedNamespaces)
 		}
 	}
 
@@ -736,6 +746,10 @@ func (c *Client) GetWorkloadDetail(ctx context.Context, kind string, namespace s
 		return c.getConfigMapDetail(ctx, namespace, name)
 	case workloadControllerSecret:
 		return c.getSecretDetail(ctx, namespace, name)
+	case workloadControllerService:
+		return c.GetServiceDetail(ctx, namespace, name)
+	case workloadControllerIngress:
+		return c.GetIngressDetail(ctx, namespace, name)
 	default:
 		return nil, fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -1009,6 +1023,10 @@ func (c *Client) UpdateWorkloadManifest(ctx context.Context, kind string, namesp
 			return fmt.Errorf("failed to update secret: %w", updateErr)
 		}
 		return nil
+	case workloadControllerService:
+		return c.UpdateServiceManifest(ctx, namespace, name, manifest)
+	case workloadControllerIngress:
+		return c.UpdateIngressManifest(ctx, namespace, name, manifest)
 	default:
 		return fmt.Errorf("unsupported workload kind %q", kind)
 	}
@@ -1101,8 +1119,66 @@ func (c *Client) DeleteWorkload(ctx context.Context, kind string, namespace stri
 			return fmt.Errorf("failed to delete secret: %w", deleteErr)
 		}
 		return nil
+	case workloadControllerService:
+		return c.DeleteService(ctx, namespace, name)
+	case workloadControllerIngress:
+		return c.DeleteIngress(ctx, namespace, name)
 	default:
 		return fmt.Errorf("unsupported workload kind %q", kind)
+	}
+}
+
+func (c *Client) RestartWorkload(ctx context.Context, kind string, namespace string, name string) error {
+	controllerKind, err := parseWorkloadControllerKind(kind)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("resource name is required")
+	}
+
+	restartAnnotation := map[string]string{
+		"kubectl.kubernetes.io/restartedAt": time.Now().UTC().Format(time.RFC3339),
+	}
+
+	switch controllerKind {
+	case workloadControllerDeployment:
+		return c.RestartDeployment(ctx, namespace, name)
+	case workloadControllerStateful:
+		ss, getErr := c.clientset.AppsV1().StatefulSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get stateful set: %w", getErr)
+		}
+		if ss.Spec.Template.Annotations == nil {
+			ss.Spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range restartAnnotation {
+			ss.Spec.Template.Annotations[k] = v
+		}
+		if _, updateErr := c.clientset.AppsV1().StatefulSets(namespace).Update(ctx, ss, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("failed to restart stateful set: %w", updateErr)
+		}
+		return nil
+	case workloadControllerDaemonSet:
+		ds, getErr := c.clientset.AppsV1().DaemonSets(namespace).Get(ctx, name, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to get daemon set: %w", getErr)
+		}
+		if ds.Spec.Template.Annotations == nil {
+			ds.Spec.Template.Annotations = make(map[string]string)
+		}
+		for k, v := range restartAnnotation {
+			ds.Spec.Template.Annotations[k] = v
+		}
+		if _, updateErr := c.clientset.AppsV1().DaemonSets(namespace).Update(ctx, ds, metav1.UpdateOptions{}); updateErr != nil {
+			return fmt.Errorf("failed to restart daemon set: %w", updateErr)
+		}
+		return nil
+	default:
+		return fmt.Errorf("restart is not supported for %s", kind)
 	}
 }
 

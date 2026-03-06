@@ -291,6 +291,51 @@ func (a *App) DeleteWorkloadResource(filename string, kind string, namespace str
 	return client.DeleteWorkload(a.ctx, kind, namespace, name)
 }
 
+// GetNodeResources returns node resources for the given cluster.
+func (a *App) GetNodeResources(filename string) ([]kube.NodeResource, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetNodeResources(a.ctx)
+}
+
+// GetNodeDetail returns detailed node information for the given cluster and node.
+func (a *App) GetNodeDetail(filename string, name string) (*kube.NodeDetail, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetNodeDetail(a.ctx, name)
+}
+
+// DebugNode creates a debug pod on the given node.
+func (a *App) DebugNode(filename string, nodeName string) (*kube.PodExecResult, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.DebugNode(a.ctx, nodeName)
+}
+
+// GetClusterEvents returns cluster events for the given namespaces.
+func (a *App) GetClusterEvents(filename string, namespaces []string) ([]kube.ClusterEvent, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetEvents(a.ctx, namespaces)
+}
+
+// RestartWorkload restarts a workload (deployment/statefulset/daemonset) with a rollout restart.
+func (a *App) RestartWorkload(filename string, kind string, namespace string, name string) error {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return err
+	}
+	return client.RestartWorkload(a.ctx, kind, namespace, name)
+}
+
 // DeletePodResource deletes a pod by namespace/name.
 func (a *App) DeletePodResource(filename string, namespace string, podName string) error {
 	client, err := a.newTempClient(filename)

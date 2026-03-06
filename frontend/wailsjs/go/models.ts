@@ -21,6 +21,34 @@ export namespace cluster {
 
 export namespace kube {
 	
+	export class ClusterEvent {
+	    type: string;
+	    reason: string;
+	    objectKind: string;
+	    objectName: string;
+	    namespace: string;
+	    message: string;
+	    count: number;
+	    age: string;
+	    createdAtUnix: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClusterEvent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.reason = source["reason"];
+	        this.objectKind = source["objectKind"];
+	        this.objectName = source["objectName"];
+	        this.namespace = source["namespace"];
+	        this.message = source["message"];
+	        this.count = source["count"];
+	        this.age = source["age"];
+	        this.createdAtUnix = source["createdAtUnix"];
+	    }
+	}
 	export class ResourceMetrics {
 	    cpuUsage: number;
 	    cpuRequests: number;
@@ -477,6 +505,163 @@ export namespace kube {
 	        this.annotations = source["annotations"];
 	    }
 	}
+	export class NodeAddress {
+	    type: string;
+	    address: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeAddress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.address = source["address"];
+	    }
+	}
+	export class NodeConditionInfo {
+	    type: string;
+	    status: string;
+	    reason: string;
+	    message: string;
+	    age: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeConditionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.status = source["status"];
+	        this.reason = source["reason"];
+	        this.message = source["message"];
+	        this.age = source["age"];
+	    }
+	}
+	export class NodeTaint {
+	    key: string;
+	    value: string;
+	    effect: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeTaint(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.value = source["value"];
+	        this.effect = source["effect"];
+	    }
+	}
+	export class NodeDetail {
+	    name: string;
+	    role: string;
+	    status: string;
+	    version: string;
+	    kernelVersion: string;
+	    os: string;
+	    architecture: string;
+	    containerRuntime: string;
+	    cpu: string;
+	    memory: string;
+	    pods: string;
+	    cpuAllocatable: string;
+	    memAllocatable: string;
+	    podAllocatable: string;
+	    age: string;
+	    created: string;
+	    uid: string;
+	    labels: Record<string, string>;
+	    annotations: Record<string, string>;
+	    conditions: NodeConditionInfo[];
+	    taints: NodeTaint[];
+	    addresses: NodeAddress[];
+	    events: PodDetailEvent[];
+	    manifest: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.role = source["role"];
+	        this.status = source["status"];
+	        this.version = source["version"];
+	        this.kernelVersion = source["kernelVersion"];
+	        this.os = source["os"];
+	        this.architecture = source["architecture"];
+	        this.containerRuntime = source["containerRuntime"];
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
+	        this.pods = source["pods"];
+	        this.cpuAllocatable = source["cpuAllocatable"];
+	        this.memAllocatable = source["memAllocatable"];
+	        this.podAllocatable = source["podAllocatable"];
+	        this.age = source["age"];
+	        this.created = source["created"];
+	        this.uid = source["uid"];
+	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
+	        this.conditions = this.convertValues(source["conditions"], NodeConditionInfo);
+	        this.taints = this.convertValues(source["taints"], NodeTaint);
+	        this.addresses = this.convertValues(source["addresses"], NodeAddress);
+	        this.events = this.convertValues(source["events"], PodDetailEvent);
+	        this.manifest = source["manifest"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class NodeResource {
+	    name: string;
+	    role: string;
+	    status: string;
+	    version: string;
+	    cpu: string;
+	    memory: string;
+	    pods: string;
+	    createdAtUnix: number;
+	    age: string;
+	    labels: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new NodeResource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.role = source["role"];
+	        this.status = source["status"];
+	        this.version = source["version"];
+	        this.cpu = source["cpu"];
+	        this.memory = source["memory"];
+	        this.pods = source["pods"];
+	        this.createdAtUnix = source["createdAtUnix"];
+	        this.age = source["age"];
+	        this.labels = source["labels"];
+	    }
+	}
+	
 	
 	export class PodDetailVolume {
 	    name: string;

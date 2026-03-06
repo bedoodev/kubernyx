@@ -1,9 +1,6 @@
 export type ConfigTabId =
   | 'config-maps'
-  | 'secrets'
-  | 'resource-quotas'
-  | 'limit-ranges'
-  | 'hpas';
+  | 'secrets';
 
 export interface ConfigTabOption {
   id: ConfigTabId;
@@ -13,9 +10,6 @@ export interface ConfigTabOption {
 export const CONFIG_TAB_OPTIONS: ConfigTabOption[] = [
   { id: 'config-maps', label: 'Config Maps' },
   { id: 'secrets', label: 'Secrets' },
-  { id: 'resource-quotas', label: 'Resource Quotas' },
-  { id: 'limit-ranges', label: 'Limit Ranges' },
-  { id: 'hpas', label: 'HPAs' },
 ];
 
 export interface ConfigResource {

@@ -3,6 +3,7 @@ import type { DeploymentDetail, DeploymentLogLine, DeploymentResource } from '..
 import {
   DeleteDeploymentResource,
   DeleteWorkloadResource,
+  RestartWorkload,
   ScaleDeployment,
   ScaleWorkload,
   SetCronJobSuspendResource,
@@ -13,7 +14,7 @@ import {
 import { parsePhase } from '../../../../shared/utils/formatting'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import type { NonPodWorkloadTabId } from '../../workloadKinds'
-import { toWorkloadAPIKind, workloadSingularLabel } from '../../workloadKinds'
+import { toWorkloadAPIKind, workloadSingularLabel, supportsRestart } from '../../workloadKinds'
 import {
   valueToneClass,
   formatCommandDisplay,
@@ -64,14 +65,6 @@ const STATEFUL_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: strin
   { id: 'metadata', label: 'Metadata' },
   { id: 'logs', label: 'Logs' },
   { id: 'yaml', label: 'YAML' },
-]
-
-const REPLICA_SET_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'metadata', label: 'Metadata' },
-  { id: 'logs', label: 'Logs' },
-  { id: 'scale', label: 'Scale' },
-  { id: 'yaml', label: 'Edit' },
 ]
 
 const JOB_DETAIL_TABS: Array<{ id: DeploymentDetailsTabId; label: string }> = [
@@ -170,6 +163,9 @@ export default function DeploymentDetailPanel({
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [restartPending, setRestartPending] = useState(false)
+  const [restartError, setRestartError] = useState<string | null>(null)
+  const [restartSuccess, setRestartSuccess] = useState<string | null>(null)
   const [cronActionPending, setCronActionPending] = useState(false)
   const [cronActionError, setCronActionError] = useState<string | null>(null)
   const [cronActionInfo, setCronActionInfo] = useState<string | null>(null)
@@ -199,7 +195,7 @@ export default function DeploymentDetailPanel({
   const isJob = workloadTab === 'jobs'
   const isCronJob = workloadTab === 'cronjobs'
   const isCronSuspended = deploymentDetail?.suspend ?? ((selectedDeployment.suspend ?? '').toLowerCase() === 'yes')
-  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments' || workloadTab === 'stateful-sets' || workloadTab === 'replica-sets'))
+  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments' || workloadTab === 'stateful-sets'))
   const detailTabs = useMemo(
     () => {
       let base = DETAIL_TABS_BASE
@@ -207,8 +203,6 @@ export default function DeploymentDetailPanel({
         base = DAEMON_SET_DETAIL_TABS
       } else if (workloadTab === 'stateful-sets') {
         base = STATEFUL_SET_DETAIL_TABS
-      } else if (workloadTab === 'replica-sets') {
-        base = REPLICA_SET_DETAIL_TABS
       } else if (workloadTab === 'jobs') {
         base = JOB_DETAIL_TABS
       } else if (workloadTab === 'cronjobs') {
@@ -521,6 +515,28 @@ export default function DeploymentDetailPanel({
       setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
     }).finally(() => {
       setDeletePending(false)
+    })
+  }
+
+  const restartWorkload = () => {
+    if (restartPending) {
+      return
+    }
+    setRestartPending(true)
+    setRestartError(null)
+    setRestartSuccess(null)
+    void RestartWorkload(
+      clusterFilename,
+      toWorkloadAPIKind(workloadTab),
+      selectedDeployment.namespace,
+      selectedDeployment.name,
+    ).then(() => {
+      setRestartSuccess('Rollout restart initiated')
+      setTimeout(() => setRestartSuccess(null), 3000)
+    }).catch((errorValue: unknown) => {
+      setRestartError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setRestartPending(false)
     })
   }
 
@@ -910,6 +926,17 @@ export default function DeploymentDetailPanel({
               </button>
             </>
           )}
+          {supportsRestart(workloadTab) && (
+            <button
+              type="button"
+              className="pods-detail-header-action-btn"
+              onClick={restartWorkload}
+              disabled={restartPending}
+              title={`Restart ${workloadLabel}`}
+            >
+              {restartPending ? 'Restarting...' : 'Restart'}
+            </button>
+          )}
           <button
             type="button"
             className="pods-detail-icon-btn danger"
@@ -972,6 +999,12 @@ export default function DeploymentDetailPanel({
       <div className={`pods-detail-body ${activeDetailsTab === 'yaml' ? 'manifest-mode' : activeDetailsTab === 'logs' ? 'logs-mode' : ''}`}>
         {deleteError && (
           <div className="pods-detail-alert error">{deleteError}</div>
+        )}
+        {restartError && (
+          <div className="pods-detail-alert error">{restartError}</div>
+        )}
+        {restartSuccess && (
+          <div className="pods-detail-alert">{restartSuccess}</div>
         )}
         {cronActionError && (
           <div className="pods-detail-alert error">{cronActionError}</div>

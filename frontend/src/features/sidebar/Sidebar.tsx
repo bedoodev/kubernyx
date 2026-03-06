@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS } from '../../shared/types'
-import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId } from '../../shared/types'
+import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS } from '../../shared/types'
+import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
 import EditClusterModal from './components/EditClusterModal'
 import './Sidebar.css'
@@ -12,9 +12,10 @@ interface Props {
   activeSection: ClusterSection | null
   activeWorkloadTab: WorkloadTabId | null
   activeConfigTab: ConfigTabId | null
+  activeNetworkTab: NetworkTabId | null
   showSettings: boolean
   onToggleCollapse: () => void
-  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId) => void
+  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId, networkTab?: NetworkTabId) => void
   onAdd: (name: string, content: string) => Promise<void>
   onRename: (oldFilename: string, newName: string) => Promise<void>
   onDelete: (filename: string) => Promise<void>
@@ -30,6 +31,10 @@ type NavItem =
   | { type: 'workload-tab'; cluster: ClusterInfo; tabId: WorkloadTabId }
   | { type: 'config-toggle'; cluster: ClusterInfo }
   | { type: 'config-tab'; cluster: ClusterInfo; tabId: ConfigTabId }
+  | { type: 'network-toggle'; cluster: ClusterInfo }
+  | { type: 'network-tab'; cluster: ClusterInfo; tabId: NetworkTabId }
+  | { type: 'nodes'; cluster: ClusterInfo }
+  | { type: 'events'; cluster: ClusterInfo }
 
 const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   clusters,
@@ -38,6 +43,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   activeSection,
   activeWorkloadTab,
   activeConfigTab,
+  activeNetworkTab,
   showSettings,
   onToggleCollapse,
   onSelect,
@@ -55,12 +61,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   const [expandedClusters, setExpandedClusters] = useState<string[]>([])
   const [expandedWorkloads, setExpandedWorkloads] = useState<string[]>([])
   const [expandedConfigs, setExpandedConfigs] = useState<string[]>([])
+  const [expandedNetwork, setExpandedNetwork] = useState<string[]>([])
 
   useEffect(() => {
     const valid = new Set(clusters.map(cluster => cluster.filename))
     setExpandedClusters(current => current.filter(filename => valid.has(filename)))
     setExpandedWorkloads(current => current.filter(filename => valid.has(filename)))
     setExpandedConfigs(current => current.filter(filename => valid.has(filename)))
+    setExpandedNetwork(current => current.filter(filename => valid.has(filename)))
   }, [clusters])
 
   useEffect(() => {
@@ -80,6 +88,12 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       ))
     } else if (activeSection === 'config') {
       setExpandedConfigs(current => (
+        current.includes(activeCluster.filename)
+          ? current
+          : [...current, activeCluster.filename]
+      ))
+    } else if (activeSection === 'network') {
+      setExpandedNetwork(current => (
         current.includes(activeCluster.filename)
           ? current
           : [...current, activeCluster.filename]
@@ -129,6 +143,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
     ))
   }
 
+  const toggleNetwork = (filename: string) => {
+    setExpandedNetwork(current => (
+      current.includes(filename)
+        ? current.filter(name => name !== filename)
+        : [...current, filename]
+    ))
+  }
+
   const [focusedNavIndex, setFocusedNavIndex] = useState(-1)
   const clusterListRef = useRef<HTMLDivElement | null>(null)
 
@@ -150,10 +172,18 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             items.push({ type: 'config-tab', cluster: c, tabId: tab.id })
           }
         }
+        items.push({ type: 'network-toggle', cluster: c })
+        if (expandedNetwork.includes(c.filename)) {
+          for (const tab of NETWORK_TAB_OPTIONS) {
+            items.push({ type: 'network-tab', cluster: c, tabId: tab.id })
+          }
+        }
+        items.push({ type: 'nodes', cluster: c })
+        items.push({ type: 'events', cluster: c })
       }
     }
     return items
-  }, [filteredClusters, expandedClusters, expandedWorkloads, expandedConfigs])
+  }, [filteredClusters, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork])
 
   const handleClusterListKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
@@ -187,6 +217,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleConfigs(item.cluster.filename)
       } else if (item.type === 'config-tab') {
         onSelect(item.cluster, 'config', undefined, item.tabId)
+      } else if (item.type === 'network-toggle') {
+        toggleNetwork(item.cluster.filename)
+      } else if (item.type === 'network-tab') {
+        onSelect(item.cluster, 'network', undefined, undefined, item.tabId)
+      } else if (item.type === 'nodes') {
+        onSelect(item.cluster, 'nodes')
+      } else if (item.type === 'events') {
+        onSelect(item.cluster, 'events')
       }
       return
     }
@@ -199,6 +237,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleWorkloads(item.cluster.filename)
       } else if (item.type === 'config-toggle' && !expandedConfigs.includes(item.cluster.filename)) {
         toggleConfigs(item.cluster.filename)
+      } else if (item.type === 'network-toggle' && !expandedNetwork.includes(item.cluster.filename)) {
+        toggleNetwork(item.cluster.filename)
       }
       return
     }
@@ -211,6 +251,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleWorkloads(item.cluster.filename)
       } else if (item.type === 'config-toggle' && expandedConfigs.includes(item.cluster.filename)) {
         toggleConfigs(item.cluster.filename)
+      } else if (item.type === 'network-toggle' && expandedNetwork.includes(item.cluster.filename)) {
+        toggleNetwork(item.cluster.filename)
       } else if (item.type === 'overview' || item.type === 'workloads-toggle') {
         const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
@@ -220,10 +262,16 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       } else if (item.type === 'config-tab') {
         const parentIdx = navItems.findIndex(n => n.type === 'config-toggle' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      } else if (item.type === 'network-tab') {
+        const parentIdx = navItems.findIndex(n => n.type === 'network-toggle' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      } else if (item.type === 'nodes' || item.type === 'events') {
+        const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
       }
       return
     }
-  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, expandedConfigs, toggleCluster, toggleWorkloads, toggleConfigs, onSelect])
+  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork, toggleCluster, toggleWorkloads, toggleConfigs, toggleNetwork, onSelect])
 
   useEffect(() => {
     if (focusedNavIndex < 0) return
@@ -289,6 +337,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                 const workloadsExpanded = expandedWorkloads.includes(c.filename)
                 const configActive = active && activeSection === 'config'
                 const configExpanded = expandedConfigs.includes(c.filename)
+                const networkActive = active && activeSection === 'network'
+                const networkExpanded = expandedNetwork.includes(c.filename)
+                const nodesActive = active && activeSection === 'nodes'
+                const eventsActive = active && activeSection === 'events'
                 const clusterNavIdx = navIdx++
 
                 return (
@@ -415,6 +467,69 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                             })}
                           </div>
                         )}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item cluster-sub-toggle ${networkActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                toggleNetwork(c.filename)
+                              }}
+                            >
+                              <span>Network</span>
+                              <svg className={`cluster-sub-chevron ${networkExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path d="M7 5l6 5-6 5V5z" />
+                              </svg>
+                            </button>
+                          )})()}
+                          {networkExpanded && (
+                          <div className="cluster-config-list">
+                            {NETWORK_TAB_OPTIONS.map(tab => {
+                              const idx = navIdx++
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  className={`cluster-config-item ${networkActive && activeNetworkTab === tab.id ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                                  data-nav-focused={focusedNavIndex === idx || undefined}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onSelect(c, 'network', undefined, undefined, tab.id)
+                                  }}
+                                >
+                                  {tab.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item ${nodesActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelect(c, 'nodes')
+                              }}
+                            >
+                              <span>Nodes</span>
+                            </button>
+                          )})()}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item ${eventsActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelect(c, 'events')
+                              }}
+                            >
+                              <span>Events</span>
+                            </button>
+                          )})()}
                       </>
                     )}
                   </>

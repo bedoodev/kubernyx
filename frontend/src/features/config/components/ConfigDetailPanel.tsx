@@ -48,6 +48,15 @@ export default function ConfigDetailPanel({
   onToggleMaximize,
   onClose,
 }: Props) {
+  const [metadataOpenSections, setMetadataOpenSections] = useState<{
+    labels: boolean
+    annotations: boolean
+    data: boolean
+  }>({
+    labels: true,
+    annotations: true,
+    data: true,
+  })
   const [expandedMetadataValues, setExpandedMetadataValues] = useState<Record<string, boolean>>({})
   const [yamlValue, setYamlValue] = useState('-')
   const [yamlDirty, setYamlDirty] = useState(false)
@@ -67,6 +76,11 @@ export default function ConfigDetailPanel({
     setYamlSaving(false)
     setDeletePending(false)
     setDeleteError(null)
+    setMetadataOpenSections({
+      labels: true,
+      annotations: true,
+      data: true,
+    })
     setExpandedMetadataValues({})
   }, [configKey])
 
@@ -88,15 +102,30 @@ export default function ConfigDetailPanel({
     }))
   }
 
-  const renderMapSection = (title: string, items: Array<[string, string]>, sectionKey: string) => (
+  const toggleMetadataSection = (section: 'labels' | 'annotations' | 'data') => {
+    setMetadataOpenSections(current => ({
+      ...current,
+      [section]: !current[section],
+    }))
+  }
+
+  const renderMapSection = (title: string, items: Array<[string, string]>, sectionKey: 'labels' | 'annotations' | 'data') => (
     <section className="pods-meta-card">
       <header className="pods-meta-card-header">
-        <div className="pods-meta-title">
-          <span>{title}</span>
-        </div>
-        <span className="pods-meta-count">{items.length}</span>
+        <button
+          type="button"
+          className={`pods-meta-header-btn ${metadataOpenSections[sectionKey] ? 'is-open' : ''}`}
+          onClick={() => toggleMetadataSection(sectionKey)}
+          aria-label={metadataOpenSections[sectionKey] ? `Collapse ${title.toLowerCase()}` : `Expand ${title.toLowerCase()}`}
+          aria-expanded={metadataOpenSections[sectionKey]}
+        >
+          <div className="pods-meta-title">
+            <span className="pods-meta-chevron">▾</span>
+            <span>{title}</span>
+          </div>
+        </button>
       </header>
-      {items.length === 0 ? (
+      {!metadataOpenSections[sectionKey] ? null : items.length === 0 ? (
         <p className="pods-meta-empty">No {title.toLowerCase()}</p>
       ) : (
         <div className="pods-meta-list">

@@ -236,6 +236,30 @@ func (c *Client) ScaleDeployment(ctx context.Context, namespace string, name str
 	return nil
 }
 
+func (c *Client) RestartDeployment(ctx context.Context, namespace string, name string) error {
+	if strings.TrimSpace(namespace) == "" {
+		return fmt.Errorf("namespace is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("deployment name is required")
+	}
+
+	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	if _, err := c.clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("failed to restart deployment: %w", err)
+	}
+	return nil
+}
+
 func deploymentStatusLabel(deployment *appsv1.Deployment) string {
 	desired := int32(1)
 	if deployment.Spec.Replicas != nil {

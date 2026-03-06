@@ -16,12 +16,6 @@ export function configSingularLabel(tab: ConfigTabId): string {
       return 'Config Map'
     case 'secrets':
       return 'Secret'
-    case 'resource-quotas':
-      return 'Resource Quota'
-    case 'limit-ranges':
-      return 'Limit Range'
-    case 'hpas':
-      return 'HPA'
     default:
       return 'Config Resource'
   }
@@ -33,12 +27,6 @@ export function configPluralLabel(tab: ConfigTabId): string {
       return 'Config Maps'
     case 'secrets':
       return 'Secrets'
-    case 'resource-quotas':
-      return 'Resource Quotas'
-    case 'limit-ranges':
-      return 'Limit Ranges'
-    case 'hpas':
-      return 'HPAs'
     default:
       return 'Config Resources'
   }

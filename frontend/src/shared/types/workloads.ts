@@ -3,7 +3,6 @@ export type WorkloadTabId =
   | 'deployments'
   | 'daemon-sets'
   | 'stateful-sets'
-  | 'replica-sets'
   | 'jobs'
   | 'cronjobs';
 
@@ -17,7 +16,6 @@ export const WORKLOAD_TAB_OPTIONS: WorkloadTabOption[] = [
   { id: 'deployments', label: 'Deployments' },
   { id: 'daemon-sets', label: 'Daemon Sets' },
   { id: 'stateful-sets', label: 'Stateful Sets' },
-  { id: 'replica-sets', label: 'Replica Sets' },
   { id: 'jobs', label: 'Jobs' },
   { id: 'cronjobs', label: 'Cronjobs' },
 ];

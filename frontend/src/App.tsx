@@ -6,7 +6,7 @@ import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterT
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
 import { useShortcutSettings } from './shared/hooks/useShortcutSettings'
 import { useDragResize } from './shared/hooks/useDragResize'
-import type { ClusterInfo, DeploymentResource, PodResource, ConfigResource, ConfigTabId } from './shared/types'
+import type { ClusterInfo, DeploymentResource, PodResource, ConfigResource, ConfigTabId, NetworkTabId, NodeResource } from './shared/types'
 import Setup from './features/setup/Setup'
 import Sidebar from './features/sidebar/Sidebar'
 import Overview from './features/overview/Overview'
@@ -17,6 +17,14 @@ import DeploymentDetailPanel, { type DeploymentDetailsTabId } from './features/w
 import ConfigDetailPanel, { type ConfigDetailsTabId } from './features/config/components/ConfigDetailPanel'
 import { workloadSingularLabel, type NonPodWorkloadTabId } from './features/workloads/workloadKinds'
 import { configSingularLabel, isImplementedConfigTab, type ImplementedConfigTabId } from './features/config/configKinds'
+import { networkSingularLabel } from './features/network/networkKinds'
+import NetworkDetailPanel, { type NetworkDetailsTabId } from './features/network/components/NetworkDetailPanel'
+import NodeDetailPanel, { type NodeDetailsTabId } from './features/nodes/components/NodeDetailPanel'
+import NetworkView from './features/network/NetworkView'
+import NodesView from './features/nodes/NodesView'
+import EventsView from './features/events/EventsView'
+import { useNetworkDetail } from './features/network/hooks/useNetworkDetail'
+import { useNodeDetail } from './features/nodes/hooks/useNodeDetail'
 import { usePodDetail } from './features/workloads/pods/hooks/usePodDetail'
 import { usePodLogs } from './features/workloads/pods/hooks/usePodLogs'
 import { useDeploymentDetail } from './features/workloads/deployments/hooks/useDeploymentDetail'
@@ -36,16 +44,18 @@ interface PodDetailTabState {
   id: string
   clusterFilename: string
   clusterName: string
-  kind: 'pod' | 'deployment' | 'config'
+  kind: 'pod' | 'deployment' | 'config' | 'network' | 'node'
   workloadTab?: NonPodWorkloadTabId
   configTab?: ConfigTabId
+  networkTab?: NetworkTabId
   pod?: PodResource
   deployment?: DeploymentResource
   configResource?: ConfigResource
+  nodeResource?: NodeResource
   pinned: boolean
 }
 
-type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId
+type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId | NetworkDetailsTabId | NodeDetailsTabId
 
 function getPodDetailTabId(clusterFilename: string, pod: PodResource): string {
   return `pod:${clusterFilename}:${pod.namespace}:${pod.name}`
@@ -67,6 +77,21 @@ function getConfigDetailTabId(
   return `config:${configTab}:${clusterFilename}:${resource.namespace}:${resource.name}`
 }
 
+function getNetworkDetailTabId(
+  clusterFilename: string,
+  networkTab: NetworkTabId,
+  resource: DeploymentResource,
+): string {
+  return `network:${networkTab}:${clusterFilename}:${resource.namespace}:${resource.name}`
+}
+
+function getNodeDetailTabId(
+  clusterFilename: string,
+  node: NodeResource,
+): string {
+  return `node:${clusterFilename}:${node.name}`
+}
+
 function getPodRowKey(pod: PodResource): string {
   return `${pod.namespace}/${pod.name}`
 }
@@ -80,10 +105,17 @@ function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
     const kindLabel = configSingularLabel(tab.configTab ?? 'config-maps')
     return `${kindLabel}: ${tab.configResource?.name ?? '-'} < ${tab.clusterName} >`
   }
+  if (tab.kind === 'network') {
+    const kindLabel = networkSingularLabel(tab.networkTab ?? 'services')
+    return `${kindLabel}: ${tab.deployment?.name ?? '-'} < ${tab.clusterName} >`
+  }
+  if (tab.kind === 'node') {
+    return `Node: ${tab.nodeResource?.name ?? '-'} < ${tab.clusterName} >`
+  }
   return `${tab.pod?.name ?? '-'} < ${tab.clusterName} >`
 }
 
-function normalizeDetailPanelTab(kind: 'pod' | 'deployment' | 'config', tab?: DetailPanelTabId): DetailPanelTabId {
+function normalizeDetailPanelTab(kind: PodDetailTabState['kind'], tab?: DetailPanelTabId): DetailPanelTabId {
   if (kind === 'deployment') {
     return (
       tab === 'overview'
@@ -94,7 +126,19 @@ function normalizeDetailPanelTab(kind: 'pod' | 'deployment' | 'config', tab?: De
       || tab === 'logs'
     ) ? tab : 'overview'
   }
+  if (kind === 'network') {
+    return (
+      tab === 'overview'
+      || tab === 'yaml'
+    ) ? tab : 'overview'
+  }
   if (kind === 'config') {
+    return (
+      tab === 'overview'
+      || tab === 'yaml'
+    ) ? tab : 'overview'
+  }
+  if (kind === 'node') {
     return (
       tab === 'overview'
       || tab === 'yaml'
@@ -170,6 +214,15 @@ export default function App() {
   const activeConfigTab = activePodDetailTab?.kind === 'config'
     ? (activePodDetailTab.configTab ?? 'config-maps')
     : 'config-maps'
+  const activeNetworkForDetail = activePodDetailTab?.kind === 'network'
+    ? (activePodDetailTab.deployment ?? null)
+    : null
+  const activeNetworkDetailTab = activePodDetailTab?.kind === 'network'
+    ? (activePodDetailTab.networkTab ?? 'services')
+    : 'services'
+  const activeNodeForDetail = activePodDetailTab?.kind === 'node'
+    ? (activePodDetailTab.nodeResource ?? null)
+    : null
 
   const { podDetail, podDetailLoading, podDetailError } = usePodDetail(
     activePodDetailTab?.clusterFilename ?? '',
@@ -196,6 +249,15 @@ export default function App() {
     activePodDetailTab?.clusterFilename ?? '',
     activeConfigForDetail,
     isImplementedConfigTab(activeConfigTab) ? activeConfigTab : 'config-maps',
+  )
+  const { networkDetail, networkDetailLoading, networkDetailError } = useNetworkDetail(
+    activePodDetailTab?.clusterFilename ?? '',
+    activeNetworkForDetail,
+    activeNetworkDetailTab,
+  )
+  const { nodeDetail, nodeDetailLoading, nodeDetailError } = useNodeDetail(
+    activePodDetailTab?.clusterFilename ?? '',
+    activeNodeForDetail,
   )
 
   const handleClosePodDetailTab = useCallback((tabId: string) => {
@@ -426,6 +488,145 @@ export default function App() {
     ))
   }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
 
+  const handleActivateNetworkDetail = useCallback((
+    cluster: ClusterInfo,
+    networkTab: NetworkTabId,
+    resource: DeploymentResource,
+    options: { pin: boolean },
+  ) => {
+    const tabId = getNetworkDetailTabId(cluster.filename, networkTab, resource)
+    const inheritedDetailTab = normalizeDetailPanelTab(
+      'network',
+      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+    ) as DeploymentDetailsTabId
+    setShowSettings(false)
+
+    setPodDetailTabs(current => {
+      const existingIndex = current.findIndex(tab => tab.id === tabId)
+      if (existingIndex >= 0) {
+        const next = [...current]
+        next[existingIndex] = {
+          ...next[existingIndex],
+          clusterName: cluster.name,
+          kind: 'network',
+          workloadTab: undefined,
+          configTab: undefined,
+          networkTab,
+          deployment: resource,
+          pod: undefined,
+          configResource: undefined,
+          nodeResource: undefined,
+          pinned: next[existingIndex].pinned || options.pin,
+        }
+        return next
+      }
+
+      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      return [
+        ...base,
+        {
+          id: tabId,
+          clusterFilename: cluster.filename,
+          clusterName: cluster.name,
+          kind: 'network' as const,
+          workloadTab: undefined,
+          configTab: undefined,
+          networkTab,
+          deployment: resource,
+          pod: undefined,
+          configResource: undefined,
+          nodeResource: undefined,
+          pinned: options.pin,
+        },
+      ]
+    })
+
+    setActivePodDetailTabId(tabId)
+    if (podDetailTabs.length === 0) {
+      const mainBody = mainBodyRef.current
+      if (mainBody) {
+        const totalWidth = mainBody.clientWidth
+        const maxWidth = getSplitMaxWidth(totalWidth)
+        const halfWidth = Math.floor(totalWidth / 2)
+        setDetailPanelWidth(clamp(halfWidth, APP_DETAIL_MIN_WIDTH, maxWidth))
+      }
+    }
+    setDetailPanelTabByPodTabId(current => (
+      Object.prototype.hasOwnProperty.call(current, tabId)
+        ? current
+        : { ...current, [tabId]: inheritedDetailTab }
+    ))
+  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+
+  const handleActivateNodeDetail = useCallback((
+    cluster: ClusterInfo,
+    node: NodeResource,
+    options: { pin: boolean },
+  ) => {
+    const tabId = getNodeDetailTabId(cluster.filename, node)
+    const inheritedDetailTab = normalizeDetailPanelTab(
+      'node',
+      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+    ) as ConfigDetailsTabId
+    setShowSettings(false)
+
+    setPodDetailTabs(current => {
+      const existingIndex = current.findIndex(tab => tab.id === tabId)
+      if (existingIndex >= 0) {
+        const next = [...current]
+        next[existingIndex] = {
+          ...next[existingIndex],
+          clusterName: cluster.name,
+          kind: 'node',
+          workloadTab: undefined,
+          configTab: undefined,
+          networkTab: undefined,
+          deployment: undefined,
+          pod: undefined,
+          configResource: undefined,
+          nodeResource: node,
+          pinned: next[existingIndex].pinned || options.pin,
+        }
+        return next
+      }
+
+      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      return [
+        ...base,
+        {
+          id: tabId,
+          clusterFilename: cluster.filename,
+          clusterName: cluster.name,
+          kind: 'node' as const,
+          workloadTab: undefined,
+          configTab: undefined,
+          networkTab: undefined,
+          deployment: undefined,
+          pod: undefined,
+          configResource: undefined,
+          nodeResource: node,
+          pinned: options.pin,
+        },
+      ]
+    })
+
+    setActivePodDetailTabId(tabId)
+    if (podDetailTabs.length === 0) {
+      const mainBody = mainBodyRef.current
+      if (mainBody) {
+        const totalWidth = mainBody.clientWidth
+        const maxWidth = getSplitMaxWidth(totalWidth)
+        const halfWidth = Math.floor(totalWidth / 2)
+        setDetailPanelWidth(clamp(halfWidth, APP_DETAIL_MIN_WIDTH, maxWidth))
+      }
+    }
+    setDetailPanelTabByPodTabId(current => (
+      Object.prototype.hasOwnProperty.call(current, tabId)
+        ? current
+        : { ...current, [tabId]: inheritedDetailTab }
+    ))
+  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+
   const handlePodDetailPanelTabChange = useCallback((tab: DetailPanelTabId) => {
     if (!activePodDetailTabId) {
       return
@@ -622,6 +823,21 @@ export default function App() {
     ? `${activePodDetailTab.configResource?.namespace ?? ''}/${activePodDetailTab.configResource?.name ?? ''}`
     : null
 
+  const activeNetworkKey = (activeTab?.section === 'network'
+    && activePodDetailTab
+    && activePodDetailTab.kind === 'network'
+    && activePodDetailTab.clusterFilename === activeTab.cluster.filename
+    && (activePodDetailTab.networkTab ?? 'services') === activeTab.networkTab)
+    ? `${activePodDetailTab.deployment?.namespace ?? ''}/${activePodDetailTab.deployment?.name ?? ''}`
+    : null
+
+  const activeNodeKey = (activeTab?.section === 'nodes'
+    && activePodDetailTab
+    && activePodDetailTab.kind === 'node'
+    && activePodDetailTab.clusterFilename === activeTab.cluster.filename)
+    ? activePodDetailTab.nodeResource?.name ?? null
+    : null
+
   const handleDetailsResizeStart = (event: ReactMouseEvent<HTMLButtonElement>) => {
     const mainBody = mainBodyRef.current
     if (!mainBody) {
@@ -661,6 +877,7 @@ export default function App() {
             activeSection={activeTab?.section ?? null}
             activeWorkloadTab={activeTab?.section !== 'workloads' ? null : activeTab.workloadTab}
             activeConfigTab={activeTab?.section !== 'config' ? null : activeTab.configTab}
+            activeNetworkTab={activeTab?.section !== 'network' ? null : activeTab.networkTab}
             showSettings={showSettings}
             onToggleCollapse={sidebar.onToggle}
             onSelect={handleSelectCluster}
@@ -763,6 +980,38 @@ export default function App() {
                   options,
                 )}
               />
+            ) : activeTab.section === 'network' ? (
+              <NetworkView
+                cluster={activeTab.cluster}
+                activeTab={activeTab.networkTab}
+                namespaces={clusterTabs.activeNetworkNamespaceOptions}
+                selectedNamespaces={clusterTabs.activeNetworkNamespaces}
+                onNamespacesChange={clusterTabs.handleNetworkNamespacesChange}
+                activeNetworkKey={activeNetworkKey}
+                onNetworkActivate={(resource, options) => handleActivateNetworkDetail(
+                  activeTab.cluster,
+                  activeTab.networkTab,
+                  resource,
+                  options,
+                )}
+              />
+            ) : activeTab.section === 'nodes' ? (
+              <NodesView
+                cluster={activeTab.cluster}
+                activeNodeKey={activeNodeKey}
+                onNodeActivate={(node, options) => handleActivateNodeDetail(
+                  activeTab.cluster,
+                  node,
+                  options,
+                )}
+              />
+            ) : activeTab.section === 'events' ? (
+              <EventsView
+                cluster={activeTab.cluster}
+                namespaces={clusterTabs.activeEventsNamespaceOptions}
+                selectedNamespaces={clusterTabs.activeEventsNamespaces}
+                onNamespacesChange={clusterTabs.handleEventsNamespacesChange}
+              />
             ) : (
               <Overview
                 cluster={activeTab.cluster}
@@ -850,6 +1099,37 @@ export default function App() {
                       deploymentLogs={deploymentLogs}
                       deploymentLogsLoading={deploymentLogsLoading}
                       deploymentLogsError={deploymentLogsError}
+                      detailsMaximized={detailPanelMaximized}
+                      showMaximizeButton
+                      onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                      onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+                    />
+                  ) : activePodDetailTab.kind === 'network' ? (
+                    <NetworkDetailPanel
+                      clusterFilename={activePodDetailTab.clusterFilename}
+                      networkTab={activePodDetailTab.networkTab ?? 'services'}
+                      mode={detailPanelMaximized ? 'modal' : 'split'}
+                      activeDetailsTab={normalizeDetailPanelTab('network', activePodDetailPanelTab) as NetworkDetailsTabId}
+                      onDetailsTabChange={handlePodDetailPanelTabChange}
+                      selectedResource={activePodDetailTab.deployment as DeploymentResource}
+                      detail={networkDetail}
+                      detailLoading={networkDetailLoading}
+                      detailError={networkDetailError}
+                      detailsMaximized={detailPanelMaximized}
+                      showMaximizeButton
+                      onToggleMaximize={() => setDetailPanelMaximized(current => !current)}
+                      onClose={() => handleClosePodDetailTab(activePodDetailTab.id)}
+                    />
+                  ) : activePodDetailTab.kind === 'node' ? (
+                    <NodeDetailPanel
+                      clusterFilename={activePodDetailTab.clusterFilename}
+                      mode={detailPanelMaximized ? 'modal' : 'split'}
+                      activeDetailsTab={normalizeDetailPanelTab('node', activePodDetailPanelTab) as NodeDetailsTabId}
+                      onDetailsTabChange={handlePodDetailPanelTabChange}
+                      selectedNode={activePodDetailTab.nodeResource as NodeResource}
+                      nodeDetail={nodeDetail}
+                      nodeDetailLoading={nodeDetailLoading}
+                      nodeDetailError={nodeDetailError}
                       detailsMaximized={detailPanelMaximized}
                       showMaximizeButton
                       onToggleMaximize={() => setDetailPanelMaximized(current => !current)}

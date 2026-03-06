@@ -7,6 +7,8 @@ export function AddCluster(arg1:string,arg2:string):Promise<void>;
 
 export function ConnectCluster(arg1:string,arg2:string):Promise<kube.ClusterOverview>;
 
+export function DebugNode(arg1:string,arg2:string):Promise<kube.PodExecResult>;
+
 export function DeleteCluster(arg1:string):Promise<void>;
 
 export function DeleteDeploymentResource(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -21,11 +23,17 @@ export function GetBasePath():Promise<string>;
 
 export function GetClusterConfig(arg1:string):Promise<string>;
 
+export function GetClusterEvents(arg1:string,arg2:Array<string>):Promise<Array<kube.ClusterEvent>>;
+
 export function GetDeploymentDetails(arg1:string,arg2:string,arg3:string):Promise<kube.DeploymentDetail>;
 
 export function GetDeploymentLogs(arg1:string,arg2:string,arg3:string,arg4:number):Promise<Array<kube.DeploymentLogLine>>;
 
 export function GetDeploymentResources(arg1:string,arg2:Array<string>):Promise<Array<kube.DeploymentResource>>;
+
+export function GetNodeDetail(arg1:string,arg2:string):Promise<kube.NodeDetail>;
+
+export function GetNodeResources(arg1:string):Promise<Array<kube.NodeResource>>;
 
 export function GetPodDetails(arg1:string,arg2:string,arg3:string):Promise<kube.PodDetail>;
 
@@ -44,6 +52,8 @@ export function ListClusters():Promise<Array<cluster.ClusterInfo>>;
 export function RefreshOverview(arg1:string):Promise<kube.ClusterOverview>;
 
 export function RenameCluster(arg1:string,arg2:string):Promise<string>;
+
+export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SavePodLogsFile(arg1:string,arg2:string):Promise<string>;
 

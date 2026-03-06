@@ -136,12 +136,6 @@ function isTerminalUnavailableError(message: string): boolean {
   return (
     value.includes('unable to start container process')
     || value.includes('executable file not found')
-    || value.includes('connection refused')
-    || value.includes('context deadline exceeded')
-    || value.includes('i/o timeout')
-    || value.includes('failed to execute command')
-    || value.includes('no such host')
-    || value.includes('stream error')
   )
 }
 
@@ -583,7 +577,6 @@ export default function PodDetailPanel({
           const user = result.stdout.trim()
           const combinedMessage = `${result.stderr}\n${result.stdout}`.trim()
           const unavailableFromResult = isTerminalUnavailableError(combinedMessage)
-            || ((result.exitCode === 126 || result.exitCode === 127) && combinedMessage.length > 0)
 
           setShellSessions(current => {
             const session = current[containerForWhoami] ?? EMPTY_SHELL_SESSION
@@ -1477,7 +1470,6 @@ export default function PodDetailPanel({
       let newCwd = currentCwd
       const combinedMessage = `${result.stderr}\n${result.stdout}`.trim()
       const unavailableFromResult = isTerminalUnavailableError(combinedMessage)
-        || ((result.exitCode === 126 || result.exitCode === 127) && combinedMessage.length > 0)
 
       if (result.stdout) {
         const lines = result.stdout.split('\n')
@@ -1527,8 +1519,17 @@ export default function PodDetailPanel({
           ...current,
           [containerForExec]: {
             ...session,
-            error: message,
-            unavailable: isTerminalUnavailableError(message),
+            entries: [
+              ...session.entries,
+              {
+                id: Date.now() + session.entries.length,
+                container: containerForExec,
+                command,
+                stdout: '',
+                stderr: message,
+                exitCode: 1,
+              },
+            ],
           },
         }
       })
@@ -1779,7 +1780,7 @@ export default function PodDetailPanel({
                   )}
                   {hasError ? (
                     <pre className="pods-shell-stderr">
-                      {combinedOutput || `Command failed with exit code ${entry.exitCode}`}
+                      {combinedOutput || 'Command failed.'}
                     </pre>
                   ) : (
                     <>
@@ -1790,9 +1791,6 @@ export default function PodDetailPanel({
                         <pre className="pods-shell-stderr">{entry.stderr}</pre>
                       )}
                     </>
-                  )}
-                  {entry.exitCode !== 0 && (
-                    <span className="pods-shell-exit-code">exit {entry.exitCode}</span>
                   )}
                 </div>
               )
