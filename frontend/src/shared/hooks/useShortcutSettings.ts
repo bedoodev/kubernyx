@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 
-export type ShortcutId = 'closeTab' | 'toggleSidebar' | 'toggleDetailPanel'
+export type ShortcutId = 'closeTab' | 'toggleSidebar' | 'toggleDetailPanel' | 'openTerminal'
 
 export interface ShortcutBinding {
   key: string
@@ -15,6 +15,7 @@ const DEFAULT_SHORTCUTS: ShortcutMap = {
   closeTab: { key: 'w', label: 'Close Tab' },
   toggleSidebar: { key: 'b', label: 'Toggle Sidebar' },
   toggleDetailPanel: { key: 'd', label: 'Toggle Detail Panel' },
+  openTerminal: { key: 't', label: 'Open Cluster Terminal' },
 }
 
 function loadShortcuts(): ShortcutMap {
@@ -26,6 +27,7 @@ function loadShortcuts(): ShortcutMap {
       closeTab: parsed.closeTab ?? DEFAULT_SHORTCUTS.closeTab,
       toggleSidebar: parsed.toggleSidebar ?? DEFAULT_SHORTCUTS.toggleSidebar,
       toggleDetailPanel: parsed.toggleDetailPanel ?? DEFAULT_SHORTCUTS.toggleDetailPanel,
+      openTerminal: parsed.openTerminal ?? DEFAULT_SHORTCUTS.openTerminal,
     }
   } catch {
     return { ...DEFAULT_SHORTCUTS }

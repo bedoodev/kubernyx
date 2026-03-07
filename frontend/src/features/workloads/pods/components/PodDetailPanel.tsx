@@ -78,14 +78,14 @@ const LOGS_LEVEL_OPTIONS: Array<{ value: LogLevelFilter; label: string }> = [
   { value: 'error', label: 'Error' },
 ]
 const LOGS_CONTAINER_TAG_COLORS = [
-  '#8a9fc4',
-  '#a89b7e',
-  '#7e9bb8',
-  '#7fb89a',
-  '#b88a90',
-  '#9a8fb8',
-  '#b89a7e',
-  '#7eb894',
+  '#4fd8ff',
+  '#63f0b7',
+  '#8dd9ff',
+  '#ffd369',
+  '#ff94c2',
+  '#b6a5ff',
+  '#7ee2f2',
+  '#8ce17b',
 ]
 
 function getContainerTagColor(containerName: string): string {
@@ -1182,7 +1182,6 @@ export default function PodDetailPanel({
 
   const renderLogsTab = () => {
     const showContainerTag = logsContainerFilter === LOGS_ALL_CONTAINERS
-    const plainLogs = logsLevelFilter !== 'all'
     const containerLabel = logsContainerFilter === LOGS_ALL_CONTAINERS ? 'All Containers' : logsContainerFilter
     const logLevelLabel = LOGS_LEVEL_OPTIONS.find(option => option.value === logsLevelFilter)?.label ?? 'All Logs'
     const visibleLogCount = visibleLogs.length
@@ -1394,20 +1393,20 @@ export default function PodDetailPanel({
               visibleLogs.map((line, index) => (
                 <p
                   key={`${line.container}-${line.createdAtUnix}-${index}`}
-                  className={`pods-log-line ${plainLogs ? 'tone-plain' : `tone-${detectLogTone(line.message)}`}`}
+                  className={`pods-log-line tone-${detectLogTone(line.message)}`}
                 >
                   {logsShowTimestamp && line.createdAt !== '-' && (
-                    <span className={`pods-log-meta ${plainLogs ? 'plain' : ''}`}>[{line.createdAt}] </span>
+                    <span className="pods-log-meta pods-log-meta-timestamp">[{line.createdAt}] </span>
                   )}
                   {showContainerTag && (
                     <span
-                      className={`pods-log-meta pods-log-container-tag ${plainLogs ? 'plain' : ''}`}
-                      style={plainLogs ? undefined : { color: getContainerTagColor(line.container) }}
+                      className="pods-log-meta pods-log-meta-container pods-log-container-tag"
+                      style={{ color: getContainerTagColor(line.container) }}
                     >
                       [{line.container}]{' '}
                     </span>
                   )}
-                  <span>{line.message}</span>
+                  <span className="pods-log-message">{line.message}</span>
                 </p>
               ))
             )}
@@ -2385,8 +2384,8 @@ export default function PodDetailPanel({
               ) : (
                 initLogsDataByKey[initLogsModal.key]!.map((line, lineIndex) => (
                   <p key={`${line.container}-${line.createdAtUnix}-${lineIndex}`} className={`pods-log-line tone-${detectLogTone(line.message)}`}>
-                    {line.createdAt !== '-' && <span className="pods-log-meta">[{line.createdAt}] </span>}
-                    <span>{line.message}</span>
+                    {line.createdAt !== '-' && <span className="pods-log-meta pods-log-meta-timestamp">[{line.createdAt}] </span>}
+                    <span className="pods-log-message">{line.message}</span>
                   </p>
                 ))
               )}

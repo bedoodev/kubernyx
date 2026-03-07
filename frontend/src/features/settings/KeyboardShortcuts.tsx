@@ -9,7 +9,7 @@ interface Props {
   onResetAll: () => void
 }
 
-const SHORTCUT_ORDER: ShortcutId[] = ['closeTab', 'toggleSidebar', 'toggleDetailPanel']
+const SHORTCUT_ORDER: ShortcutId[] = ['closeTab', 'toggleSidebar', 'toggleDetailPanel', 'openTerminal']
 
 function formatKey(key: string): string {
   const modifier = isMacPlatform() ? 'Cmd' : 'Ctrl'

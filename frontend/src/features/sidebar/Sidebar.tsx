@@ -22,6 +22,7 @@ interface Props {
   onReadConfig: (filename: string) => Promise<string>
   onUpdateConfig: (filename: string, content: string) => Promise<void>
   onSettingsClick: () => void
+  onOpenTerminal: (cluster: ClusterInfo) => void
 }
 
 type NavItem =
@@ -53,6 +54,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   onReadConfig,
   onUpdateConfig,
   onSettingsClick,
+  onOpenTerminal,
 }, ref) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingConfigCluster, setEditingConfigCluster] = useState<ClusterInfo | null>(null)
@@ -117,6 +119,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   const handleDelete = (filename: string) => {
     setContextMenu(null)
     onDelete(filename)
+  }
+
+  const handleOpenTerminal = (filename: string) => {
+    const cluster = clusters.find(item => item.filename === filename)
+    setContextMenu(null)
+    if (cluster) {
+      onOpenTerminal(cluster)
+    }
   }
 
   const toggleCluster = (filename: string) => {
@@ -552,6 +562,9 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       {contextMenu && (
         <div className="context-overlay" onClick={() => setContextMenu(null)}>
           <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => handleOpenTerminal(contextMenu.filename)}>
+              Open Terminal
+            </button>
             <button onClick={() => {
               const cluster = clusters.find(item => item.filename === contextMenu.filename)
               setContextMenu(null)

@@ -394,6 +394,23 @@
   max-height: 100%;
 }
 
+.app-shortcut-alert {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 96;
+  max-width: min(460px, calc(100vw - 36px));
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(214, 106, 118, 0.55);
+  background: rgba(38, 16, 22, 0.95);
+  color: #ffb0b8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+
 @media (max-width: 1200px) {
   .app-pod-detail-pane {
     min-width: 360px;

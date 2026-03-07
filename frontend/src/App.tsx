@@ -23,6 +23,7 @@ import NodeDetailPanel, { type NodeDetailsTabId } from './features/nodes/compone
 import NetworkView from './features/network/NetworkView'
 import NodesView from './features/nodes/NodesView'
 import EventsView from './features/events/EventsView'
+import ClusterTerminalPanel from './features/terminal/ClusterTerminalPanel'
 import { useNetworkDetail } from './features/network/hooks/useNetworkDetail'
 import { useNodeDetail } from './features/nodes/hooks/useNodeDetail'
 import { usePodDetail } from './features/workloads/pods/hooks/usePodDetail'
@@ -53,6 +54,13 @@ interface PodDetailTabState {
   configResource?: ConfigResource
   nodeResource?: NodeResource
   pinned: boolean
+}
+
+interface TerminalTabState {
+  id: string
+  clusterFilename: string
+  title: string
+  customTitle: boolean
 }
 
 type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId | NetworkDetailsTabId | NodeDetailsTabId
@@ -94,6 +102,10 @@ function getNodeDetailTabId(
 
 function getPodRowKey(pod: PodResource): string {
   return `${pod.namespace}/${pod.name}`
+}
+
+function createTerminalTabId(clusterFilename: string): string {
+  return `terminal:${clusterFilename}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
 }
 
 function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
@@ -168,6 +180,10 @@ export default function App() {
   const { shortcuts, updateShortcut, resetAll: resetShortcuts } = useShortcutSettings()
   const [view, setView] = useState<AppView>('loading')
   const [showSettings, setShowSettings] = useState(false)
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTabState[]>([])
+  const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(null)
+  const [terminalCollapsed, setTerminalCollapsed] = useState(false)
+  const [terminalOpenAlert, setTerminalOpenAlert] = useState<string | null>(null)
   const sidebar = useSidebarResize({ default: 260, min: 220, max: 520 })
   const clusterTabs = useClusterTabs({ showSettings })
   const [podDetailTabs, setPodDetailTabs] = useState<PodDetailTabState[]>([])
@@ -196,6 +212,18 @@ export default function App() {
     () => (activePodDetailTabId ? (podDetailTabs.find(tab => tab.id === activePodDetailTabId) ?? null) : null),
     [activePodDetailTabId, podDetailTabs],
   )
+  const terminalPanelTabs = useMemo(
+    () => terminalTabs.flatMap(tab => {
+      const cluster = clusterTabs.clusters.find(item => item.filename === tab.clusterFilename)
+      return cluster ? [{ id: tab.id, cluster, title: tab.title }] : []
+    }),
+    [clusterTabs.clusters, terminalTabs],
+  )
+  const activeTerminalTab = useMemo(
+    () => (activeTerminalTabId ? (terminalPanelTabs.find(tab => tab.id === activeTerminalTabId) ?? null) : null),
+    [activeTerminalTabId, terminalPanelTabs],
+  )
+  const resolvedActiveTerminalTabId = activeTerminalTab?.id ?? terminalPanelTabs[0]?.id ?? null
 
   const activePodDetailPanelTab = activePodDetailTab
     ? (detailPanelTabByPodTabId[activePodDetailTab.id] ?? 'overview')
@@ -656,18 +684,138 @@ export default function App() {
     clusterList?.focus()
   }, [activePodDetailTabId, handleClosePodDetailTab])
 
+  const openTerminalForCluster = useCallback((cluster: ClusterInfo) => {
+    if (cluster.healthStatus === 'red') {
+      setTerminalOpenAlert(`Cannot open terminal: "${cluster.name}" cluster is unreachable.`)
+      return
+    }
+    const nextTabId = createTerminalTabId(cluster.filename)
+    setShowSettings(false)
+    setTerminalCollapsed(false)
+    setTerminalTabs(current => [...current, {
+      id: nextTabId,
+      clusterFilename: cluster.filename,
+      title: cluster.name,
+      customTitle: false,
+    }])
+    setActiveTerminalTabId(nextTabId)
+  }, [])
+
+  const closeTerminalTabById = useCallback((tabId: string) => {
+    setTerminalTabs(current => {
+      const index = current.findIndex(tab => tab.id === tabId)
+      if (index === -1) {
+        return current
+      }
+      const next = current.filter(tab => tab.id !== tabId)
+      setActiveTerminalTabId(previous => {
+        if (next.length === 0) {
+          return null
+        }
+        if (previous && previous !== tabId && next.some(tab => tab.id === previous)) {
+          return previous
+        }
+        const fallbackIndex = Math.max(0, Math.min(index, next.length - 1))
+        return next[fallbackIndex].id
+      })
+      if (next.length === 0) {
+        setTerminalCollapsed(false)
+      }
+      return next
+    })
+  }, [])
+
+  const handleCloseFocusedTerminalTabShortcut = useCallback(() => {
+    if (!resolvedActiveTerminalTabId) {
+      return
+    }
+    closeTerminalTabById(resolvedActiveTerminalTabId)
+  }, [closeTerminalTabById, resolvedActiveTerminalTabId])
+
+  const isTerminalFocused = useCallback(() => {
+    const activeElement = document.activeElement as HTMLElement | null
+    if (!activeElement) {
+      return false
+    }
+    const terminalRoot = document.querySelector('.cluster-terminal-panel') as HTMLElement | null
+    if (!terminalRoot) {
+      return false
+    }
+    return terminalRoot.contains(activeElement)
+  }, [])
+
+  const handleOpenClusterTerminalShortcut = useCallback(() => {
+    const targetCluster = clusterTabs.activeTab?.cluster ?? null
+    if (!targetCluster) {
+      setTerminalOpenAlert('Select a cluster tab first to open terminal.')
+      return
+    }
+    openTerminalForCluster(targetCluster)
+  }, [clusterTabs.activeTab, openTerminalForCluster])
+
   useKeyboardShortcuts({
     enabled: view === 'main',
     shortcuts,
     showSettings,
     activeTabId: activePodDetailTabId,
     hasDetailPanel: Boolean(activePodDetailTab),
+    hasTerminalPanel: terminalPanelTabs.length > 0,
     onCloseSettings: () => setShowSettings(false),
     onCloseTab: handleClosePodDetailTab,
+    isTerminalFocused,
+    onCloseTerminalTab: handleCloseFocusedTerminalTabShortcut,
     onToggleSidebar: sidebar.onToggle,
     onToggleDetailMinimize: handleToggleDetailMinimize,
+    onOpenTerminal: handleOpenClusterTerminalShortcut,
     onEscapeNav: handleEscapeNav,
   })
+
+  useEffect(() => {
+    if (!terminalOpenAlert) {
+      return
+    }
+    const timeout = window.setTimeout(() => {
+      setTerminalOpenAlert(null)
+    }, 2600)
+    return () => window.clearTimeout(timeout)
+  }, [terminalOpenAlert])
+
+  useEffect(() => {
+    if (terminalPanelTabs.length === 0) {
+      if (activeTerminalTabId !== null) {
+        setActiveTerminalTabId(null)
+      }
+      if (terminalCollapsed) {
+        setTerminalCollapsed(false)
+      }
+      return
+    }
+    if (!activeTerminalTabId || !terminalPanelTabs.some(tab => tab.id === activeTerminalTabId)) {
+      setActiveTerminalTabId(terminalPanelTabs[0].id)
+    }
+  }, [activeTerminalTabId, terminalCollapsed, terminalPanelTabs])
+
+  useEffect(() => {
+    const clusterNameByFilename = new Map(clusterTabs.clusters.map(cluster => [cluster.filename, cluster.name]))
+    setTerminalTabs(current => {
+      let changed = false
+      const next: TerminalTabState[] = []
+      for (const tab of current) {
+        const clusterName = clusterNameByFilename.get(tab.clusterFilename)
+        if (!clusterName) {
+          changed = true
+          continue
+        }
+        if (!tab.customTitle && tab.title !== clusterName) {
+          changed = true
+          next.push({ ...tab, title: clusterName })
+          continue
+        }
+        next.push(tab)
+      }
+      return changed ? next : current
+    })
+  }, [clusterTabs.clusters])
 
   useEffect(() => {
     GetBasePath().then(path => {
@@ -789,6 +937,43 @@ export default function App() {
     clusterTabs.handleSelectCluster(...args)
   }
 
+  const handleOpenClusterTerminal = useCallback((cluster: ClusterInfo) => {
+    openTerminalForCluster(cluster)
+  }, [openTerminalForCluster])
+
+  const handleSelectTerminalTab = useCallback((tabId: string) => {
+    setActiveTerminalTabId(tabId)
+  }, [])
+
+  const handleCloseClusterTerminalTab = useCallback((tabId: string) => {
+    closeTerminalTabById(tabId)
+  }, [closeTerminalTabById])
+
+  const handleRenameClusterTerminalTab = useCallback((tabId: string, title: string) => {
+    const nextTitle = title.trim()
+    if (!nextTitle) {
+      return
+    }
+    setTerminalTabs(current => current.map(tab => (
+      tab.id === tabId
+        ? { ...tab, title: nextTitle, customTitle: true }
+        : tab
+    )))
+  }, [])
+
+  const handleCloseClusterTerminalPanel = useCallback(() => {
+    setTerminalTabs([])
+    setActiveTerminalTabId(null)
+    setTerminalCollapsed(false)
+  }, [])
+
+  const handleToggleClusterTerminalCollapsed = useCallback(() => {
+    if (terminalPanelTabs.length === 0) {
+      return
+    }
+    setTerminalCollapsed(current => !current)
+  }, [terminalPanelTabs.length])
+
   if (view === 'loading') {
     return <div className="app-loading"><div className="spinner" /></div>
   }
@@ -887,6 +1072,7 @@ export default function App() {
             onReadConfig={clusterTabs.handleGetClusterConfig}
             onUpdateConfig={clusterTabs.handleUpdateClusterConfig}
             onSettingsClick={() => setShowSettings(true)}
+            onOpenTerminal={handleOpenClusterTerminal}
           />
           <div
             className={`sidebar-resizer ${sidebar.sidebarResizing ? 'active' : ''}`}
@@ -1161,7 +1347,25 @@ export default function App() {
             <div className="app-pod-detail-inline-overlay" onClick={() => setDetailPanelMaximized(false)} />
           )}
         </div>
+        {terminalPanelTabs.length > 0 && (
+          <ClusterTerminalPanel
+            tabs={terminalPanelTabs}
+            activeTabId={resolvedActiveTerminalTabId}
+            collapsed={terminalCollapsed}
+            onSelectTab={handleSelectTerminalTab}
+            onCloseTab={handleCloseClusterTerminalTab}
+            onRenameTab={handleRenameClusterTerminalTab}
+            onToggleCollapse={handleToggleClusterTerminalCollapsed}
+            onClosePanel={handleCloseClusterTerminalPanel}
+          />
+        )}
       </main>
+
+      {terminalOpenAlert && (
+        <div className="app-shortcut-alert error" role="alert" aria-live="assertive">
+          {terminalOpenAlert}
+        </div>
+      )}
 
       {showSettings && (
         <Modal title="Settings" onClose={() => setShowSettings(false)}>

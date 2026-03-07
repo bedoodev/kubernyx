@@ -6,6 +6,10 @@ export function AddCluster(arg1, arg2) {
   return window['go']['main']['App']['AddCluster'](arg1, arg2);
 }
 
+export function CompleteClusterKubectl(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CompleteClusterKubectl'](arg1, arg2, arg3);
+}
+
 export function ConnectCluster(arg1, arg2) {
   return window['go']['main']['App']['ConnectCluster'](arg1, arg2);
 }
@@ -28,6 +32,10 @@ export function DeletePodResource(arg1, arg2, arg3) {
 
 export function DeleteWorkloadResource(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['DeleteWorkloadResource'](arg1, arg2, arg3, arg4);
+}
+
+export function ExecClusterKubectl(arg1, arg2) {
+  return window['go']['main']['App']['ExecClusterKubectl'](arg1, arg2);
 }
 
 export function ExecPodCommand(arg1, arg2, arg3, arg4, arg5) {

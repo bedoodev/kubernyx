@@ -2406,8 +2406,12 @@
 .pods-log-line {
   margin: 0;
   padding: 1px 14px 1px 16px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  display: block;
+  min-width: 100%;
+  width: max-content;
   color: rgba(200, 210, 230, 0.85);
   font-size: 11.5px;
   border-left: 2px solid transparent;
@@ -2423,11 +2427,28 @@
 }
 
 .pods-log-meta {
-  color: rgba(140, 160, 200, 0.5);
+  color: rgba(176, 196, 236, 0.92);
+  font-weight: 600;
+}
+
+.pods-log-meta.pods-log-meta-timestamp {
+  color: #bccbff;
+}
+
+.pods-log-meta.pods-log-meta-pod {
+  color: #4fd8ff;
+}
+
+.pods-log-meta.pods-log-meta-container {
+  color: #63f0b7;
 }
 
 .pods-log-meta.plain {
   color: rgba(200, 210, 230, 0.7);
+}
+
+.pods-log-message {
+  color: #e8eeff;
 }
 
 .pods-logs-top-loader {
@@ -2439,9 +2460,12 @@
 }
 
 .pods-log-line.tone-error {
-  color: #d4838a;
   border-left-color: #d4838a;
   background: rgba(212, 131, 138, 0.04);
+}
+
+.pods-log-line.tone-error .pods-log-message {
+  color: #ff7e8b;
 }
 
 .pods-log-line.tone-error:hover {
@@ -2449,14 +2473,20 @@
 }
 
 .pods-log-line.tone-success {
-  color: rgba(200, 210, 230, 0.85);
   border-left-color: #7bb895;
 }
 
+.pods-log-line.tone-success .pods-log-message {
+  color: #5bf0a3;
+}
+
 .pods-log-line.tone-warning {
-  color: #c9a86c;
   border-left-color: #c9a86c;
   background: rgba(201, 168, 108, 0.03);
+}
+
+.pods-log-line.tone-warning .pods-log-message {
+  color: #ffc94d;
 }
 
 .pods-log-line.tone-warning:hover {
@@ -2464,17 +2494,33 @@
 }
 
 .pods-log-line.tone-debug {
-  color: rgba(160, 175, 200, 0.7);
-  border-left-color: rgba(160, 175, 200, 0.25);
+  border-left-color: rgba(152, 167, 196, 0.45);
+  background: rgba(112, 126, 152, 0.08);
+}
+
+.pods-log-line.tone-debug .pods-log-message {
+  color: #9fb1cd;
+}
+
+.pods-log-line.tone-debug:hover {
+  background: rgba(112, 126, 152, 0.14);
 }
 
 .pods-log-line.tone-default {
-  color: rgba(200, 210, 230, 0.85);
+  border-left-color: rgba(150, 172, 214, 0.2);
+}
+
+.pods-log-line.tone-default .pods-log-message {
+  color: #e8eeff;
 }
 
 .pods-log-line.tone-plain {
-  color: rgba(200, 210, 230, 0.85);
+  border-left-color: rgba(150, 172, 214, 0.2);
   background: transparent;
+}
+
+.pods-log-line.tone-plain .pods-log-message {
+  color: #e8eeff;
 }
 
 .pods-logs-jump-btn {

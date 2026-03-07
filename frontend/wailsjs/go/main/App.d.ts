@@ -5,6 +5,8 @@ import {cluster} from '../models';
 
 export function AddCluster(arg1:string,arg2:string):Promise<void>;
 
+export function CompleteClusterKubectl(arg1:string,arg2:string,arg3:boolean):Promise<kube.PodExecResult>;
+
 export function ConnectCluster(arg1:string,arg2:string):Promise<kube.ClusterOverview>;
 
 export function DebugNode(arg1:string,arg2:string):Promise<kube.PodExecResult>;
@@ -16,6 +18,8 @@ export function DeleteDeploymentResource(arg1:string,arg2:string,arg3:string):Pr
 export function DeletePodResource(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DeleteWorkloadResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function ExecClusterKubectl(arg1:string,arg2:string):Promise<kube.PodExecResult>;
 
 export function ExecPodCommand(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<kube.PodExecResult>;
 

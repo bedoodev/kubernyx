@@ -8,10 +8,14 @@ interface UseKeyboardShortcutsOptions {
   showSettings: boolean
   activeTabId: string | null
   hasDetailPanel: boolean
+  hasTerminalPanel: boolean
   onCloseSettings: () => void
   onCloseTab: (tabId: string) => void
+  isTerminalFocused: () => boolean
+  onCloseTerminalTab: () => void
   onToggleSidebar: () => void
   onToggleDetailMinimize: () => void
+  onOpenTerminal: () => void
   onEscapeNav: () => void
 }
 
@@ -21,10 +25,14 @@ export function useKeyboardShortcuts({
   showSettings,
   activeTabId,
   hasDetailPanel,
+  hasTerminalPanel,
   onCloseSettings,
   onCloseTab,
+  isTerminalFocused,
+  onCloseTerminalTab,
   onToggleSidebar,
   onToggleDetailMinimize,
+  onOpenTerminal,
   onEscapeNav,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
@@ -70,6 +78,10 @@ export function useKeyboardShortcuts({
           onCloseSettings()
           return
         }
+        if (hasTerminalPanel && isTerminalFocused()) {
+          onCloseTerminalTab()
+          return
+        }
         if (!activeTabId) {
           return
         }
@@ -86,10 +98,31 @@ export function useKeyboardShortcuts({
       if (key === shortcuts.toggleDetailPanel.key && hasDetailPanel) {
         event.preventDefault()
         onToggleDetailMinimize()
+        return
+      }
+
+      if (key === shortcuts.openTerminal.key) {
+        event.preventDefault()
+        onOpenTerminal()
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [enabled, shortcuts, activeTabId, hasDetailPanel, showSettings, onCloseSettings, onCloseTab, onToggleSidebar, onToggleDetailMinimize, onEscapeNav])
+  }, [
+    enabled,
+    shortcuts,
+    activeTabId,
+    hasDetailPanel,
+    hasTerminalPanel,
+    showSettings,
+    onCloseSettings,
+    onCloseTab,
+    isTerminalFocused,
+    onCloseTerminalTab,
+    onToggleSidebar,
+    onToggleDetailMinimize,
+    onOpenTerminal,
+    onEscapeNav,
+  ])
 }

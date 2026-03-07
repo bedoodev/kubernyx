@@ -27,6 +27,8 @@ export {
   SetCronJobSuspendResource,
   GetPodDetails,
   GetPodLogs,
+  CompleteClusterKubectl,
+  ExecClusterKubectl,
   ExecPodCommand,
   SavePodLogsFile,
   StartPodLogsStream,

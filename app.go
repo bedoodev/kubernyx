@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -361,6 +364,141 @@ func (a *App) ExecPodCommand(filename string, namespace string, podName string, 
 		return nil, err
 	}
 	return client.ExecPodCommand(a.ctx, namespace, podName, container, command)
+}
+
+func (a *App) runKubectlCommand(command string, args []string) (*kube.PodExecResult, error) {
+	cmd := exec.CommandContext(a.ctx, "kubectl", args...)
+	cmd.Env = os.Environ()
+
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	runErr := cmd.Run()
+	result := &kube.PodExecResult{
+		Container: "cluster",
+		Command:   command,
+		Stdout:    stdoutBuf.String(),
+		Stderr:    stderrBuf.String(),
+		ExitCode:  0,
+	}
+
+	if runErr == nil {
+		return result, nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+		return result, nil
+	}
+
+	result.ExitCode = 127
+	if strings.TrimSpace(result.Stderr) == "" {
+		result.Stderr = runErr.Error()
+	} else {
+		result.Stderr = fmt.Sprintf("%s\n%s", strings.TrimSpace(result.Stderr), runErr.Error())
+	}
+	return result, nil
+}
+
+func (a *App) runShellCommand(command string, env []string) (*kube.PodExecResult, error) {
+	cmd := exec.CommandContext(a.ctx, "sh", "-lc", command)
+	if len(env) > 0 {
+		cmd.Env = env
+	} else {
+		cmd.Env = os.Environ()
+	}
+
+	var stdoutBuf bytes.Buffer
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	runErr := cmd.Run()
+	result := &kube.PodExecResult{
+		Container: "cluster",
+		Command:   command,
+		Stdout:    stdoutBuf.String(),
+		Stderr:    stderrBuf.String(),
+		ExitCode:  0,
+	}
+
+	if runErr == nil {
+		return result, nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+		return result, nil
+	}
+
+	result.ExitCode = 127
+	if strings.TrimSpace(result.Stderr) == "" {
+		result.Stderr = runErr.Error()
+	} else {
+		result.Stderr = fmt.Sprintf("%s\n%s", strings.TrimSpace(result.Stderr), runErr.Error())
+	}
+	return result, nil
+}
+
+// ExecClusterKubectl executes a kubectl command against the selected cluster kubeconfig.
+func (a *App) ExecClusterKubectl(filename string, command string) (*kube.PodExecResult, error) {
+	commandText := strings.TrimSpace(command)
+	if commandText == "" {
+		return nil, fmt.Errorf("command is required")
+	}
+
+	kubeconfigPath, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	trimmed := strings.TrimSpace(commandText)
+	if strings.HasPrefix(trimmed, "kubectl ") {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "kubectl"))
+	} else if trimmed == "kubectl" {
+		trimmed = ""
+	} else {
+		return &kube.PodExecResult{
+			Container: "cluster",
+			Command:   commandText,
+			Stdout:    "",
+			Stderr:    "Only kubectl commands are supported in cluster terminal.",
+			ExitCode:  127,
+		}, nil
+	}
+
+	args := []string{"--kubeconfig", kubeconfigPath}
+	if trimmed != "" {
+		args = append(args, strings.Fields(trimmed)...)
+	}
+	return a.runKubectlCommand(commandText, args)
+}
+
+// CompleteClusterKubectl returns kubectl shell completion suggestions for the given command text.
+func (a *App) CompleteClusterKubectl(filename string, input string, trailingSpace bool) (*kube.PodExecResult, error) {
+	kubeconfigPath, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	inputText := strings.TrimSpace(input)
+	if strings.HasPrefix(inputText, "kubectl") {
+		inputText = strings.TrimSpace(strings.TrimPrefix(inputText, "kubectl"))
+	}
+
+	args := []string{"--kubeconfig", kubeconfigPath, "__completeNoDesc"}
+	if inputText != "" {
+		args = append(args, strings.Fields(inputText)...)
+	}
+	if trailingSpace {
+		args = append(args, "")
+	}
+
+	return a.runKubectlCommand(strings.TrimSpace(input), args)
 }
 
 // SavePodLogsFile opens a save dialog and writes log content to disk.

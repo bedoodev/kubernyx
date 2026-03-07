@@ -1266,11 +1266,11 @@ export default function DeploymentDetailPanel({
                   visibleLogs.map((line, index) => (
                     <p key={`${line.podName}-${line.container}-${line.createdAtUnix}-${index}`} className={`pods-log-line tone-${detectLogTone(line.message)}`}>
                       {logsShowTimestamp && line.createdAt !== '-' && (
-                        <span className="pods-log-meta">[{line.createdAt}] </span>
+                        <span className="pods-log-meta pods-log-meta-timestamp">[{line.createdAt}] </span>
                       )}
-                      <span className="pods-log-meta">[{line.podName}] </span>
-                      <span className="pods-log-meta">[{line.container}] </span>
-                      <span>{line.message}</span>
+                      <span className="pods-log-meta pods-log-meta-pod">[{line.podName}] </span>
+                      <span className="pods-log-meta pods-log-meta-container">[{line.container}] </span>
+                      <span className="pods-log-message">{line.message}</span>
                     </p>
                   ))
                 )}

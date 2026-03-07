@@ -103,14 +103,31 @@ export function syncToggleState(current: Record<string, boolean>, keys: string[]
 
 export function detectLogTone(message: string): LogToneKey {
   const value = message.toLowerCase()
+
+  // Prefer the first explicit log-level token when available.
+  const firstLevelToken = value.match(/\b(debug|info|warn|warning|error|fatal|panic|exception|traceback|success|succeeded|successful|ok)\b/)
+  if (firstLevelToken) {
+    const token = firstLevelToken[1]
+    if (token === 'error' || token === 'fatal' || token === 'panic' || token === 'exception' || token === 'traceback') {
+      return 'error'
+    }
+    if (token === 'warn' || token === 'warning') {
+      return 'warning'
+    }
+    if (token === 'debug') {
+      return 'debug'
+    }
+    return 'success'
+  }
+
   if (/\b(error|fatal|panic|exception|traceback)\b/.test(value)) {
     return 'error'
   }
-  if (/\b(warn|warning)\b/.test(value)) {
-    return 'warning'
-  }
   if (/\b(debug)\b/.test(value)) {
     return 'debug'
+  }
+  if (/\b(warn|warning)\b/.test(value)) {
+    return 'warning'
   }
   if (/\b(info|success|succeeded|successful|ok)\b/.test(value)) {
     return 'success'
