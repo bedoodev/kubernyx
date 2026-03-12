@@ -488,13 +488,13 @@ export default function PodsTable({
                 </tr>
               </thead>
               <tbody ref={tableBodyRef}>
-                {error ? (
-                  <tr>
-                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row error">{error}</td>
-                  </tr>
-                ) : loading ? (
+                {loading ? (
                   <tr>
                     <td colSpan={POD_COLUMNS.length} className="pods-empty-row">Loading pods...</td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row error">{error}</td>
                   </tr>
                 ) : sortedItems.length === 0 ? (
                   <tr>
