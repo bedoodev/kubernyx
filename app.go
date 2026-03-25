@@ -444,7 +444,25 @@ func (a *App) runShellCommand(command string, env []string) (*kube.PodExecResult
 	return result, nil
 }
 
-// ExecClusterKubectl executes a kubectl command against the selected cluster kubeconfig.
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func (a *App) runShellCompletion(token string, firstToken bool, env []string) (*kube.PodExecResult, error) {
+	quotedToken := shellQuote(token)
+	var command string
+	if firstToken {
+		command = fmt.Sprintf("compgen -c -- %s | sort -u", quotedToken)
+	} else {
+		command = fmt.Sprintf("compgen -f -- %s | sort -u", quotedToken)
+	}
+	return a.runShellCommand(command, env)
+}
+
+// ExecClusterKubectl executes a shell command with KUBECONFIG set for the selected cluster.
 func (a *App) ExecClusterKubectl(filename string, command string) (*kube.PodExecResult, error) {
 	commandText := strings.TrimSpace(command)
 	if commandText == "" {
@@ -456,49 +474,55 @@ func (a *App) ExecClusterKubectl(filename string, command string) (*kube.PodExec
 		return nil, err
 	}
 
-	trimmed := strings.TrimSpace(commandText)
-	if strings.HasPrefix(trimmed, "kubectl ") {
-		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "kubectl"))
-	} else if trimmed == "kubectl" {
-		trimmed = ""
-	} else {
-		return &kube.PodExecResult{
-			Container: "cluster",
-			Command:   commandText,
-			Stdout:    "",
-			Stderr:    "Only kubectl commands are supported in cluster terminal.",
-			ExitCode:  127,
-		}, nil
-	}
-
-	args := []string{"--kubeconfig", kubeconfigPath}
-	if trimmed != "" {
-		args = append(args, strings.Fields(trimmed)...)
-	}
-	return a.runKubectlCommand(commandText, args)
+	env := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
+	return a.runShellCommand(commandText, env)
 }
 
-// CompleteClusterKubectl returns kubectl shell completion suggestions for the given command text.
+// CompleteClusterKubectl returns terminal completion suggestions for the given command text.
 func (a *App) CompleteClusterKubectl(filename string, input string, trailingSpace bool) (*kube.PodExecResult, error) {
 	kubeconfigPath, err := cluster.GetKubeconfigPath(a.cfg.BasePath, filename)
 	if err != nil {
 		return nil, err
 	}
 
+	env := append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	inputText := strings.TrimSpace(input)
-	if strings.HasPrefix(inputText, "kubectl") {
-		inputText = strings.TrimSpace(strings.TrimPrefix(inputText, "kubectl"))
+	kubectlInput := strings.TrimSpace(inputText)
+
+	if strings.HasPrefix(kubectlInput, "kubectl ") {
+		kubectlInput = strings.TrimSpace(strings.TrimPrefix(kubectlInput, "kubectl"))
+		args := []string{"--kubeconfig", kubeconfigPath, "__completeNoDesc"}
+		if kubectlInput != "" {
+			args = append(args, strings.Fields(kubectlInput)...)
+		}
+		if trailingSpace {
+			args = append(args, "")
+		}
+		return a.runKubectlCommand(strings.TrimSpace(input), args)
+	}
+	if kubectlInput == "kubectl" {
+		args := []string{"--kubeconfig", kubeconfigPath, "__completeNoDesc"}
+		if trailingSpace {
+			args = append(args, "")
+		}
+		return a.runKubectlCommand(strings.TrimSpace(input), args)
 	}
 
-	args := []string{"--kubeconfig", kubeconfigPath, "__completeNoDesc"}
-	if inputText != "" {
-		args = append(args, strings.Fields(inputText)...)
+	if strings.TrimSpace(input) == "" {
+		return a.runShellCompletion("", true, env)
 	}
+
+	fields := strings.Fields(input)
+	firstToken := len(fields) <= 1 && !strings.Contains(strings.TrimSpace(input), " ")
+	token := ""
 	if trailingSpace {
-		args = append(args, "")
+		firstToken = false
+		token = ""
+	} else if len(fields) > 0 {
+		token = fields[len(fields)-1]
 	}
 
-	return a.runKubectlCommand(strings.TrimSpace(input), args)
+	return a.runShellCompletion(token, firstToken, env)
 }
 
 // SavePodLogsFile opens a save dialog and writes log content to disk.

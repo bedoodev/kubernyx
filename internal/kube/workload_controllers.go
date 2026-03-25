@@ -34,26 +34,47 @@ const (
 )
 
 func parseWorkloadControllerKind(kind string) (workloadControllerKind, error) {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	switch normalized {
 	case string(workloadControllerDeployment):
+		return workloadControllerDeployment, nil
+	case "deployments":
 		return workloadControllerDeployment, nil
 	case string(workloadControllerDaemonSet):
 		return workloadControllerDaemonSet, nil
+	case "daemon-set", "daemon-sets", "daemonsets":
+		return workloadControllerDaemonSet, nil
 	case string(workloadControllerStateful):
+		return workloadControllerStateful, nil
+	case "stateful-set", "stateful-sets", "statefulsets":
 		return workloadControllerStateful, nil
 	case string(workloadControllerReplica):
 		return workloadControllerReplica, nil
+	case "replica-set", "replica-sets", "replicasets":
+		return workloadControllerReplica, nil
 	case string(workloadControllerJob):
+		return workloadControllerJob, nil
+	case "jobs":
 		return workloadControllerJob, nil
 	case string(workloadControllerCronJob):
 		return workloadControllerCronJob, nil
+	case "cron-job", "cron-jobs", "cronjobs":
+		return workloadControllerCronJob, nil
 	case string(workloadControllerConfigMap):
+		return workloadControllerConfigMap, nil
+	case "config-map", "config-maps", "configmaps":
 		return workloadControllerConfigMap, nil
 	case string(workloadControllerSecret):
 		return workloadControllerSecret, nil
+	case "secrets":
+		return workloadControllerSecret, nil
 	case string(workloadControllerService):
 		return workloadControllerService, nil
+	case "services":
+		return workloadControllerService, nil
 	case string(workloadControllerIngress):
+		return workloadControllerIngress, nil
+	case "ingresses":
 		return workloadControllerIngress, nil
 	default:
 		return "", fmt.Errorf("unsupported workload kind %q", kind)

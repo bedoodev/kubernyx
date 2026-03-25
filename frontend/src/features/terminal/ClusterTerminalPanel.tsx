@@ -14,6 +14,7 @@ import './ClusterTerminalPanel.css'
 interface TerminalEntry {
   id: number
   command: string
+  cwd: string
   stdout: string
   stderr: string
   exitCode: number
@@ -22,6 +23,7 @@ interface TerminalEntry {
 interface TerminalSession {
   entries: TerminalEntry[]
   command: string
+  cwd: string
   running: boolean
   tabCompleting: boolean
   history: string[]
@@ -39,6 +41,7 @@ interface Props {
   tabs: ClusterTerminalTab[]
   activeTabId: string | null
   collapsed: boolean
+  onCreateTab: (cluster: ClusterInfo) => void
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
   onRenameTab: (tabId: string, title: string) => void
@@ -49,6 +52,7 @@ interface Props {
 const EMPTY_SESSION: TerminalSession = {
   entries: [],
   command: '',
+  cwd: '~',
   running: false,
   tabCompleting: false,
   history: [],
@@ -59,6 +63,7 @@ const EMPTY_SESSION: TerminalSession = {
 const DEFAULT_HEIGHT = 280
 const MIN_HEIGHT = 180
 const MAX_HEIGHT = 560
+const CWD_MARKER = '__KUBERNYX_CWD__'
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -75,6 +80,71 @@ function parseKubectlCompletions(rawOutput: string): string[] {
   }
 
   return lines.filter(line => !line.startsWith(':'))
+}
+
+function parseCompletionSuggestions(rawOutput: string): string[] {
+  return rawOutput
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+}
+
+function shellQuote(value: string): string {
+  if (!value) {
+    return "''"
+  }
+  return `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+function wrapCommandWithCwd(command: string, cwd: string, columns: number): string {
+  return `export COLUMNS=${columns}; cd ${shellQuote(cwd)} 2>/dev/null || cd ~; ${command}; __kubernyx_exit=$?; printf '\\n${CWD_MARKER}%s\\n' \"$(pwd)\"; exit $__kubernyx_exit`
+}
+
+function extractCwdFromStdout(stdout: string): { output: string; cwd: string | null } {
+  if (!stdout) {
+    return { output: stdout, cwd: null }
+  }
+  const markerIndex = stdout.lastIndexOf(CWD_MARKER)
+  if (markerIndex < 0) {
+    return { output: stdout, cwd: null }
+  }
+
+  const lineStart = stdout.lastIndexOf('\n', markerIndex)
+  const start = lineStart >= 0 ? lineStart + 1 : markerIndex
+  const lineEnd = stdout.indexOf('\n', markerIndex)
+  const end = lineEnd >= 0 ? lineEnd : stdout.length
+  const markerLine = stdout.slice(start, end).trim()
+  if (!markerLine.startsWith(CWD_MARKER)) {
+    return { output: stdout, cwd: null }
+  }
+
+  const cwd = markerLine.slice(CWD_MARKER.length).trim()
+  const cleaned = `${stdout.slice(0, start)}${lineEnd >= 0 ? stdout.slice(lineEnd + 1) : ''}`.trimEnd()
+  return { output: cleaned, cwd: cwd || null }
+}
+
+function normalizeCommandForShellLayout(command: string): string {
+  const trimmed = command.trim()
+  if (!/^ls(\s|$)/.test(trimmed)) {
+    return command
+  }
+  // Only rewrite simple ls invocations, not pipelines/subshells.
+  if (/[|;&<>`$(){}]/.test(command)) {
+    return command
+  }
+
+  const hasSingleColumn = /(^|\s)-1(\s|$)|--format(?:=|\s+)single-column/.test(trimmed)
+  const hasColumn = /(^|\s)-C(\s|$)|--format(?:=|\s+)across/.test(trimmed)
+  if (hasSingleColumn || hasColumn) {
+    return command
+  }
+
+  return command.replace(/^(\s*ls)(\s|$)/, '$1 -C$2')
+}
+
+function buildShellCompletionCommand(cwd: string, token: string, firstToken: boolean): string {
+  const mode = firstToken ? '-c' : '-f'
+  return `cd ${shellQuote(cwd)} 2>/dev/null || cd ~; compgen ${mode} -- ${shellQuote(token)} | sort -u`
 }
 
 function getTokenBounds(command: string): { start: number; token: string } {
@@ -121,6 +191,7 @@ export default function ClusterTerminalPanel({
   tabs,
   activeTabId,
   collapsed,
+  onCreateTab,
   onSelectTab,
   onCloseTab,
   onRenameTab,
@@ -151,6 +222,18 @@ export default function ClusterTerminalPanel({
         ...current,
         [tabId]: nextSession,
       }
+    })
+  }, [])
+
+  const moveCaretToEnd = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const input = inputRef.current
+      if (!input) {
+        return
+      }
+      input.focus()
+      const end = input.value.length
+      input.setSelectionRange(end, end)
     })
   }, [])
 
@@ -202,6 +285,7 @@ export default function ClusterTerminalPanel({
         ...current,
         command: '',
         entries: [],
+        cwd: current.cwd,
         history: [...current.history, trimmedInput],
         historyIndex: -1,
         draft: '',
@@ -211,6 +295,10 @@ export default function ClusterTerminalPanel({
       return
     }
 
+    const layoutCommand = normalizeCommandForShellLayout(trimmedInput)
+    const viewportWidth = bodyRef.current?.clientWidth ?? 960
+    const terminalColumns = Math.max(40, Math.floor(viewportWidth / 8.2))
+    const commandToRun = wrapCommandWithCwd(layoutCommand, session.cwd, terminalColumns)
     updateSession(tabId, current => ({
       ...current,
       command: '',
@@ -222,18 +310,21 @@ export default function ClusterTerminalPanel({
     }))
 
     try {
-      const response = await ExecClusterKubectl(clusterFilename, trimmedInput)
+      const response = await ExecClusterKubectl(clusterFilename, commandToRun)
       const result = toPodExecResult(response)
+      const parsed = extractCwdFromStdout(result.stdout)
       const entry: TerminalEntry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         command: trimmedInput,
-        stdout: result.stdout,
+        cwd: session.cwd,
+        stdout: parsed.output,
         stderr: result.stderr,
         exitCode: result.exitCode,
       }
 
       updateSession(tabId, current => ({
         ...current,
+        cwd: parsed.cwd ?? current.cwd,
         running: false,
         tabCompleting: false,
         entries: [...current.entries, entry],
@@ -242,6 +333,7 @@ export default function ClusterTerminalPanel({
       const entry: TerminalEntry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
         command: trimmedInput,
+        cwd: session.cwd,
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
         exitCode: 1,
@@ -253,7 +345,7 @@ export default function ClusterTerminalPanel({
         entries: [...current.entries, entry],
       }))
     }
-  }, [activeTab, session.running, session.tabCompleting, updateSession])
+  }, [activeTab, session.cwd, session.running, session.tabCompleting, updateSession])
 
   const handleTabCompletion = useCallback(async () => {
     if (!activeTab) {
@@ -266,12 +358,18 @@ export default function ClusterTerminalPanel({
     const tabId = activeTab.id
     const clusterFilename = activeTab.cluster.filename
     const currentCommand = session.command
-    const trimmed = currentCommand.trimStart()
-    if (trimmed.length > 0 && !trimmed.startsWith('kubectl')) {
+    if (currentCommand.trim().length === 0) {
       return
     }
     const trailingSpace = /\s$/.test(currentCommand)
     const inputForCompletion = currentCommand.trim()
+    const { start, token } = getTokenBounds(currentCommand)
+    const prefixBeforeToken = currentCommand.slice(0, start).trim()
+    const firstToken = prefixBeforeToken.length === 0
+    if (firstToken && token.trim().length === 0) {
+      return
+    }
+    const isKubectlContext = currentCommand.trimStart().startsWith('kubectl')
 
     updateSession(tabId, current => ({
       ...current,
@@ -279,9 +377,20 @@ export default function ClusterTerminalPanel({
     }))
 
     try {
-      const response = await CompleteClusterKubectl(clusterFilename, inputForCompletion, trailingSpace)
-      const result = toPodExecResult(response)
-      const suggestions = parseKubectlCompletions(result.stdout)
+      let suggestions: string[] = []
+
+      if (isKubectlContext) {
+        const kubectlResponse = await CompleteClusterKubectl(clusterFilename, inputForCompletion, trailingSpace)
+        const kubectlResult = toPodExecResult(kubectlResponse)
+        suggestions = parseKubectlCompletions(kubectlResult.stdout)
+      }
+
+      if (suggestions.length === 0) {
+        const shellCompletionCommand = buildShellCompletionCommand(session.cwd, trailingSpace ? '' : token, firstToken)
+        const shellResponse = await ExecClusterKubectl(clusterFilename, shellCompletionCommand)
+        const shellResult = toPodExecResult(shellResponse)
+        suggestions = parseCompletionSuggestions(shellResult.stdout)
+      }
 
       if (suggestions.length === 0) {
         updateSession(tabId, current => ({
@@ -291,7 +400,6 @@ export default function ClusterTerminalPanel({
         return
       }
 
-      const { start, token } = getTokenBounds(currentCommand)
       const prefix = commonPrefix(suggestions)
 
       if (suggestions.length === 1) {
@@ -301,6 +409,7 @@ export default function ClusterTerminalPanel({
           tabCompleting: false,
           command: next,
         }))
+        moveCaretToEnd()
         return
       }
 
@@ -311,13 +420,15 @@ export default function ClusterTerminalPanel({
           tabCompleting: false,
           command: next,
         }))
+        moveCaretToEnd()
         return
       }
 
       const preview = suggestions.slice(0, 200).join('\n')
       const entry: TerminalEntry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        command: currentCommand || 'kubectl',
+        command: currentCommand || '<tab-complete>',
+        cwd: session.cwd,
         stdout: preview,
         stderr: '',
         exitCode: 0,
@@ -330,7 +441,8 @@ export default function ClusterTerminalPanel({
     } catch (error) {
       const entry: TerminalEntry = {
         id: Date.now() + Math.floor(Math.random() * 1000),
-        command: currentCommand || 'kubectl',
+        command: currentCommand || '<tab-complete>',
+        cwd: session.cwd,
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
         exitCode: 1,
@@ -341,7 +453,7 @@ export default function ClusterTerminalPanel({
         entries: [...current.entries, entry],
       }))
     }
-  }, [activeTab, session.command, session.running, session.tabCompleting, updateSession])
+  }, [activeTab, session.command, session.cwd, session.running, session.tabCompleting, moveCaretToEnd, updateSession])
 
   useEffect(() => {
     const validTabIds = new Set(tabs.map(tab => tab.id))
@@ -431,6 +543,15 @@ export default function ClusterTerminalPanel({
     }
     const tabId = activeTab.id
 
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+      event.preventDefault()
+      updateSession(tabId, current => ({
+        ...current,
+        entries: [],
+      }))
+      return
+    }
+
     if (event.key === 'Enter') {
       event.preventDefault()
       void runCommand(session.command)
@@ -489,6 +610,9 @@ export default function ClusterTerminalPanel({
 
     if (event.key === 'Tab') {
       event.preventDefault()
+      if (event.currentTarget.value.trim().length === 0) {
+        return
+      }
       void handleTabCompletion()
     }
   }
@@ -572,8 +696,22 @@ export default function ClusterTerminalPanel({
                 </div>
               )
             })}
+            <button
+              type="button"
+              className="cluster-terminal-tab-add"
+              onClick={() => onCreateTab(activeTab.cluster)}
+              title={`New terminal for ${activeTab.cluster.name}`}
+              aria-label={`New terminal for ${activeTab.cluster.name}`}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </button>
           </div>
-          <span className="cluster-terminal-cluster" title={activeTab.cluster.filename}>{activeTab.cluster.filename}</span>
+          <span className="cluster-terminal-cluster" title={activeTab.cluster.filename}>
+            Context: {activeTab.cluster.name}
+          </span>
         </div>
         <div className="cluster-terminal-header-actions">
           <button
@@ -596,9 +734,9 @@ export default function ClusterTerminalPanel({
           <button
             type="button"
             className="cluster-terminal-icon-btn"
-            onClick={() => updateSession(activeTab.id, current => ({ ...current, entries: [] }))}
-            title="Clear output"
-            aria-label="Clear output"
+            onClick={() => onCloseTab(activeTab.id)}
+            title="Close current terminal tab"
+            aria-label="Close current terminal tab"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6" />
@@ -628,17 +766,27 @@ export default function ClusterTerminalPanel({
           <div
             className="cluster-terminal-body"
             ref={bodyRef}
-            onClick={() => inputRef.current?.focus()}
+            onClick={() => {
+              const selection = window.getSelection()
+              if (selection && selection.toString().length > 0) {
+                return
+              }
+              inputRef.current?.focus()
+            }}
           >
             {session.entries.length === 0 && (
               <div className="cluster-terminal-welcome">
-                Run kubectl commands for this cluster.
+                Shell ready. Local commands and <code>kubectl</code> both run here with this cluster context.
               </div>
             )}
             {session.entries.map(entry => (
               <div key={entry.id} className="cluster-terminal-block">
                 <div className="cluster-terminal-prompt-line">
-                  <span className="cluster-terminal-prompt">{activeTab.cluster.name}</span>
+                  <span className="cluster-terminal-prompt">kubernyx</span>
+                  <span className="cluster-terminal-sep">@</span>
+                  <span className="cluster-terminal-context">{activeTab.cluster.name}</span>
+                  <span className="cluster-terminal-sep">:</span>
+                  <span className="cluster-terminal-cwd">{entry.cwd}</span>
                   <span className="cluster-terminal-cmd">$ {entry.command}</span>
                 </div>
                 {entry.stdout && (
@@ -658,7 +806,11 @@ export default function ClusterTerminalPanel({
           </div>
 
           <div className="cluster-terminal-input-line">
-            <span className="cluster-terminal-prompt">{activeTab.cluster.name}</span>
+            <span className="cluster-terminal-prompt">kubernyx</span>
+            <span className="cluster-terminal-sep">@</span>
+            <span className="cluster-terminal-context">{activeTab.cluster.name}</span>
+            <span className="cluster-terminal-sep">:</span>
+            <span className="cluster-terminal-cwd">{session.cwd}</span>
             <span className="cluster-terminal-cmd">$</span>
             <input
               ref={inputRef}
@@ -670,7 +822,7 @@ export default function ClusterTerminalPanel({
                 updateSession(activeTab.id, current => ({ ...current, command: value }))
               }}
               onKeyDown={handleInputKeyDown}
-              placeholder="kubectl get pods -A"
+              placeholder="Type a command (kubectl, ls, pwd, grep, ...)"
               disabled={session.running || session.tabCompleting}
               autoComplete="off"
               spellCheck={false}

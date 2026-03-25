@@ -83,6 +83,30 @@
   text-transform: uppercase;
 }
 
+.yaml-editor-edit-btn {
+  border: 1px solid rgba(126, 163, 255, 0.35);
+  border-radius: 6px;
+  background: rgba(37, 53, 92, 0.55);
+  color: #c6d8ff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.yaml-editor-edit-btn:hover {
+  border-color: rgba(147, 176, 240, 0.72);
+  color: #e7f1ff;
+}
+
+.yaml-editor-edit-btn.is-active {
+  border-color: rgba(106, 205, 148, 0.7);
+  background: rgba(34, 81, 54, 0.5);
+  color: #8cefb6;
+}
+
 .yaml-editor-toolbar-right {
   display: inline-flex;
   align-items: center;

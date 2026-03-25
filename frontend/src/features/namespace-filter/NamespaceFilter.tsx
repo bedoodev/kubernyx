@@ -38,7 +38,7 @@ export default function NamespaceFilter({
 
   const toggle = (ns: string) => {
     if (emptyMeansAll && selected.length === 0) {
-      onChange(namespaces.filter(item => item !== ns))
+      onChange([ns])
       return
     }
     if (selected.includes(ns)) {

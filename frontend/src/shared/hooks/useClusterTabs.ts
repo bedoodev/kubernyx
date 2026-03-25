@@ -19,6 +19,122 @@ const OVERVIEW_TAB_TITLE = 'Overview'
 const DEFAULT_WORKLOAD_TAB: WorkloadTabId = 'pods'
 const DEFAULT_CONFIG_TAB: ConfigTabId = 'config-maps'
 const DEFAULT_NETWORK_TAB: NetworkTabId = 'services'
+const CLUSTER_TABS_STORAGE_KEY = 'kubernyx-cluster-tabs-v1'
+
+interface PersistedClusterTabState {
+  id: string
+  section: ClusterSection
+  clusterFilename: string
+  workloadTab?: WorkloadTabId
+  configTab?: ConfigTabId
+  networkTab?: NetworkTabId
+  hasActivity?: boolean
+  nodeFilter?: NodeFilter
+  selectedNamespaces?: string[]
+}
+
+interface PersistedClusterTabsState {
+  tabs: PersistedClusterTabState[]
+  activeTabId: string | null
+  resourceNamespacesByCluster: Record<string, string[]>
+}
+
+function sanitizeNamespaces(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const unique = new Set<string>()
+  for (const item of value) {
+    const namespace = String(item ?? '').trim()
+    if (!namespace) {
+      continue
+    }
+    unique.add(namespace)
+  }
+  return [...unique]
+}
+
+function isWorkloadTabId(value: unknown): value is WorkloadTabId {
+  return WORKLOAD_TAB_OPTIONS.some(option => option.id === value)
+}
+
+function isConfigTabId(value: unknown): value is ConfigTabId {
+  return CONFIG_TAB_OPTIONS.some(option => option.id === value)
+}
+
+function isNetworkTabId(value: unknown): value is NetworkTabId {
+  return NETWORK_TAB_OPTIONS.some(option => option.id === value)
+}
+
+function isNodeFilter(value: unknown): value is NodeFilter {
+  return value === 'both' || value === 'master' || value === 'worker'
+}
+
+function isClusterSection(value: unknown): value is ClusterSection {
+  return value === 'overview'
+    || value === 'workloads'
+    || value === 'config'
+    || value === 'network'
+    || value === 'nodes'
+    || value === 'events'
+}
+
+function readPersistedClusterTabsState(): PersistedClusterTabsState | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  try {
+    const raw = window.localStorage.getItem(CLUSTER_TABS_STORAGE_KEY)
+    if (!raw) {
+      return null
+    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const rawTabs = Array.isArray(parsed.tabs) ? parsed.tabs : []
+    const tabs: PersistedClusterTabState[] = []
+
+    for (const item of rawTabs) {
+      const record = (item ?? {}) as Record<string, unknown>
+      if (!isClusterSection(record.section)) {
+        continue
+      }
+      const clusterFilename = String(record.clusterFilename ?? '').trim()
+      if (!clusterFilename) {
+        continue
+      }
+
+      const section = record.section
+      const workloadTab = isWorkloadTabId(record.workloadTab) ? record.workloadTab : DEFAULT_WORKLOAD_TAB
+      const configTab = isConfigTabId(record.configTab) ? record.configTab : DEFAULT_CONFIG_TAB
+      const networkTab = isNetworkTabId(record.networkTab) ? record.networkTab : DEFAULT_NETWORK_TAB
+      const nodeFilter = isNodeFilter(record.nodeFilter) ? record.nodeFilter : 'both'
+
+      tabs.push({
+        id: String(record.id ?? '').trim(),
+        section,
+        clusterFilename,
+        workloadTab,
+        configTab,
+        networkTab,
+        hasActivity: Boolean(record.hasActivity),
+        nodeFilter,
+        selectedNamespaces: sanitizeNamespaces(record.selectedNamespaces),
+      })
+    }
+
+    const namespacesRecord = (parsed.resourceNamespacesByCluster ?? {}) as Record<string, unknown>
+    const resourceNamespacesByCluster = Object.fromEntries(
+      Object.entries(namespacesRecord).map(([key, value]) => [key, sanitizeNamespaces(value)]),
+    )
+
+    return {
+      tabs,
+      activeTabId: parsed.activeTabId ? String(parsed.activeTabId) : null,
+      resourceNamespacesByCluster,
+    }
+  } catch {
+    return null
+  }
+}
 
 export interface ClusterTabState {
   id: string
@@ -31,10 +147,27 @@ export interface ClusterTabState {
   cluster: ClusterInfo
   overview: ClusterOverview | null
   workloads: WorkloadCounts | null
+  workloadScaleMax: number
   nodeFilter: NodeFilter
   selectedNamespaces: string[]
   loading: boolean
   error: string | null
+}
+
+function getWorkloadScaleMax(workloads: WorkloadCounts | null): number {
+  if (!workloads) {
+    return 1
+  }
+  return Math.max(
+    1,
+    workloads.pods,
+    workloads.deployments,
+    workloads.replicaSets,
+    workloads.statefulSets,
+    workloads.daemonSets,
+    workloads.jobs,
+    workloads.cronJobs,
+  )
 }
 
 export function getClusterTabId(
@@ -126,6 +259,7 @@ function createClusterTab(
     cluster,
     overview: null,
     workloads: null,
+    workloadScaleMax: 1,
     nodeFilter: 'both',
     selectedNamespaces,
     loading: false,
@@ -170,10 +304,14 @@ export interface UseClusterTabsResult {
 }
 
 export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClusterTabsResult {
+  const persistedStateRef = useRef<PersistedClusterTabsState | null>(readPersistedClusterTabsState())
+  const hasRestoredPersistedTabsRef = useRef(false)
   const [clusters, setClusters] = useState<ClusterInfo[]>([])
   const [tabs, setTabs] = useState<ClusterTabState[]>([])
-  const [activeTabId, setActiveTabId] = useState<string | null>(null)
-  const [resourceNamespacesByCluster, setResourceNamespacesByCluster] = useState<Record<string, string[]>>({})
+  const [activeTabId, setActiveTabId] = useState<string | null>(persistedStateRef.current?.activeTabId ?? null)
+  const [resourceNamespacesByCluster, setResourceNamespacesByCluster] = useState<Record<string, string[]>>(
+    persistedStateRef.current?.resourceNamespacesByCluster ?? {},
+  )
   const [resourceNamespaceOptionsByCluster, setResourceNamespaceOptionsByCluster] = useState<Record<string, string[]>>({})
   const previousActiveTabIdRef = useRef<string | null>(null)
   const previousSidebarSelectionRef = useRef<{ tabId: string; at: number } | null>(null)
@@ -233,6 +371,73 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
       ))
       setTabs(current => {
         const byFilename = new Map(normalized.map(item => [item.filename, item]))
+        const persistedState = persistedStateRef.current
+
+        if (!hasRestoredPersistedTabsRef.current && current.length === 0 && persistedState?.tabs.length) {
+          hasRestoredPersistedTabsRef.current = true
+          const restoredTabs: ClusterTabState[] = []
+          const seenTabIds = new Set<string>()
+
+          for (const persistedTab of persistedState.tabs) {
+            const cluster = byFilename.get(persistedTab.clusterFilename)
+            if (!cluster) {
+              continue
+            }
+
+            const section = persistedTab.section
+            const workloadTab = section === 'workloads'
+              ? (persistedTab.workloadTab ?? DEFAULT_WORKLOAD_TAB)
+              : DEFAULT_WORKLOAD_TAB
+            const configTab = section === 'config'
+              ? (persistedTab.configTab ?? DEFAULT_CONFIG_TAB)
+              : DEFAULT_CONFIG_TAB
+            const networkTab = section === 'network'
+              ? (persistedTab.networkTab ?? DEFAULT_NETWORK_TAB)
+              : DEFAULT_NETWORK_TAB
+            const needsNamespaces = section === 'workloads'
+              || section === 'config'
+              || section === 'network'
+              || section === 'events'
+            const selectedNamespaces = needsNamespaces
+              ? sanitizeNamespaces(
+                persistedTab.selectedNamespaces
+                ?? resourceNamespacesByCluster[cluster.filename]
+                ?? [],
+              )
+              : []
+
+            const tab = createClusterTab(
+              cluster,
+              section,
+              workloadTab,
+              configTab,
+              networkTab,
+              selectedNamespaces,
+            )
+            const tabId = persistedTab.id || tab.id
+            if (seenTabIds.has(tabId)) {
+              continue
+            }
+            seenTabIds.add(tabId)
+            restoredTabs.push({
+              ...tab,
+              id: tabId,
+              hasActivity: Boolean(persistedTab.hasActivity),
+              nodeFilter: isNodeFilter(persistedTab.nodeFilter) ? persistedTab.nodeFilter : tab.nodeFilter,
+            })
+          }
+
+          const persistedActiveTabId = persistedState.activeTabId
+          setActiveTabId(() => {
+            if (persistedActiveTabId && restoredTabs.some(tab => tab.id === persistedActiveTabId)) {
+              return persistedActiveTabId
+            }
+            return restoredTabs[0]?.id ?? null
+          })
+
+          return restoredTabs
+        }
+
         const tabIdMap = new Map<string, string>()
         const nextTabs = current.flatMap(tab => {
           const updatedCluster = byFilename.get(tab.cluster.filename)
@@ -295,17 +500,32 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
 
     try {
       const ov = await ConnectCluster(tab.cluster.filename, tab.nodeFilter)
-      const wl = await GetWorkloads(tab.selectedNamespaces)
+      const selectedWorkloadsPromise = GetWorkloads(tab.selectedNamespaces)
+      const allNamespacesWorkloadsPromise = tab.selectedNamespaces.length === 0
+        ? selectedWorkloadsPromise
+        : GetWorkloads([])
+      const [wl, wlAll] = await Promise.all([selectedWorkloadsPromise, allNamespacesWorkloadsPromise])
       if (tabRequestRef.current[tab.id] !== requestId) {
         return
       }
+      const normalizedWorkloads = normalizeWorkloads(wl)
+      const normalizedAllNamespacesWorkloads = tab.selectedNamespaces.length === 0
+        ? normalizedWorkloads
+        : normalizeWorkloads(wlAll)
       setResourceNamespaceOptionsByCluster(current => ({
         ...current,
         [tab.cluster.filename]: ov.namespaces ?? [],
       }))
       setTabs(current => current.map(item => (
         item.id === tab.id
-          ? { ...item, overview: ov, workloads: normalizeWorkloads(wl), loading: false, error: null }
+          ? {
+            ...item,
+            overview: ov,
+            workloads: normalizedWorkloads,
+            workloadScaleMax: getWorkloadScaleMax(normalizedAllNamespacesWorkloads),
+            loading: false,
+            error: null,
+          }
           : item
       )))
     } catch (e: any) {
@@ -501,19 +721,49 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
   }
 
   const handleNamespacesChange = async (ns: string[]) => {
-    if (!activeTab) return
+    if (!activeTab || activeTab.section !== 'overview') return
 
     const nextTab = { ...activeTab, selectedNamespaces: ns }
+    const tabId = nextTab.id
+    const requestId = (tabRequestRef.current[tabId] ?? 0) + 1
+    tabRequestRef.current[tabId] = requestId
+
     setTabs(current => current.map(tab => (
       tab.id === nextTab.id ? { ...tab, selectedNamespaces: ns, hasActivity: true } : tab
     )))
 
     try {
-      const wl = await GetWorkloads(ns)
+      await ConnectCluster(nextTab.cluster.filename, nextTab.nodeFilter)
+      if (tabRequestRef.current[tabId] !== requestId) {
+        return
+      }
+
+      const selectedWorkloadsPromise = GetWorkloads(ns)
+      const allNamespacesWorkloadsPromise = ns.length === 0
+        ? selectedWorkloadsPromise
+        : GetWorkloads([])
+      const [wl, wlAll] = await Promise.all([selectedWorkloadsPromise, allNamespacesWorkloadsPromise])
+      if (tabRequestRef.current[tabId] !== requestId) {
+        return
+      }
+      const normalizedWorkloads = normalizeWorkloads(wl)
+      const normalizedAllNamespacesWorkloads = ns.length === 0
+        ? normalizedWorkloads
+        : normalizeWorkloads(wlAll)
       setTabs(current => current.map(tab => (
-        tab.id === nextTab.id ? { ...tab, workloads: normalizeWorkloads(wl), error: null } : tab
+        tab.id === nextTab.id
+          ? {
+            ...tab,
+            workloads: normalizedWorkloads,
+            workloadScaleMax: getWorkloadScaleMax(normalizedAllNamespacesWorkloads),
+            error: null,
+          }
+          : tab
       )))
     } catch {
+      if (tabRequestRef.current[tabId] !== requestId) {
+        return
+      }
       await loadTabData(nextTab)
     }
   }
@@ -524,6 +774,10 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     }
 
     const clusterFilename = activeTab.cluster.filename
+    const tabId = activeTab.id
+    const requestId = (tabRequestRef.current[tabId] ?? 0) + 1
+    tabRequestRef.current[tabId] = requestId
+
     setResourceNamespacesByCluster(current => ({
       ...current,
       [clusterFilename]: ns,
@@ -536,10 +790,31 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     )))
 
     try {
-      const wl = await GetWorkloads(ns)
+      await ConnectCluster(clusterFilename, 'both')
+      if (tabRequestRef.current[tabId] !== requestId) {
+        return
+      }
+
+      const selectedWorkloadsPromise = GetWorkloads(ns)
+      const allNamespacesWorkloadsPromise = ns.length === 0
+        ? selectedWorkloadsPromise
+        : GetWorkloads([])
+      const [wl, wlAll] = await Promise.all([selectedWorkloadsPromise, allNamespacesWorkloadsPromise])
+      if (tabRequestRef.current[tabId] !== requestId) {
+        return
+      }
+      const normalizedWorkloads = normalizeWorkloads(wl)
+      const normalizedAllNamespacesWorkloads = ns.length === 0
+        ? normalizedWorkloads
+        : normalizeWorkloads(wlAll)
       setTabs(current => current.map(tab => (
         tab.section === 'workloads' && tab.cluster.filename === clusterFilename
-          ? { ...tab, workloads: normalizeWorkloads(wl), error: null }
+          ? {
+            ...tab,
+            workloads: normalizedWorkloads,
+            workloadScaleMax: getWorkloadScaleMax(normalizedAllNamespacesWorkloads),
+            error: null,
+          }
           : tab
       )))
     } catch {}
@@ -728,6 +1003,36 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     await UpdateClusterConfigApi(filename, content)
     await loadClusters()
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    try {
+      const serializedTabs: PersistedClusterTabState[] = tabs.map(tab => ({
+        id: tab.id,
+        section: tab.section,
+        clusterFilename: tab.cluster.filename,
+        workloadTab: tab.workloadTab,
+        configTab: tab.configTab,
+        networkTab: tab.networkTab,
+        hasActivity: tab.hasActivity,
+        nodeFilter: tab.nodeFilter,
+        selectedNamespaces: sanitizeNamespaces(tab.selectedNamespaces),
+      }))
+      const serializedNamespacesByCluster = Object.fromEntries(
+        Object.entries(resourceNamespacesByCluster).map(([filename, namespaces]) => [filename, sanitizeNamespaces(namespaces)]),
+      )
+      const snapshot: PersistedClusterTabsState = {
+        tabs: serializedTabs,
+        activeTabId,
+        resourceNamespacesByCluster: serializedNamespacesByCluster,
+      }
+      window.localStorage.setItem(CLUSTER_TABS_STORAGE_KEY, JSON.stringify(snapshot))
+    } catch {
+      // no-op: localStorage can fail in restricted environments
+    }
+  }, [tabs, activeTabId, resourceNamespacesByCluster])
 
   return {
     clusters,

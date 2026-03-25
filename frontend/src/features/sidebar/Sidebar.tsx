@@ -357,12 +357,12 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                   <div
                     key={c.filename}
                     className={`cluster-item ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}`}
-                    onContextMenu={e => handleContextMenu(e, c)}
                   >
                     <>
                       <div
                         className={`cluster-main-row ${focusedNavIndex === clusterNavIdx ? 'keyboard-focused' : ''}`}
                         data-nav-focused={focusedNavIndex === clusterNavIdx || undefined}
+                        onContextMenu={e => handleContextMenu(e, c)}
                       >
                         <button
                           type="button"

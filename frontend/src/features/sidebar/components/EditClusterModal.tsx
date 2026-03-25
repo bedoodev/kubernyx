@@ -99,6 +99,7 @@ export default function EditClusterModal({ cluster, onLoad, onSave, onRename, on
             className="cluster-edit-yaml"
             title={`${cluster.filename} (yaml)`}
             value={content}
+            editSessionKey={cluster.filename}
             onChange={setContent}
             minHeight={0}
           />

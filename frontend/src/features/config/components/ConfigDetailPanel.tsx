@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ConfigDetail, ConfigResource, ConfigTabId } from '../../../shared/types'
 import { DeleteWorkloadResource, UpdateWorkloadManifest } from '../../../shared/api'
+import Modal from '../../../shared/components/Modal'
 import YamlEditor from '../../../shared/components/YamlEditor'
 import { isLongMetadataValue, renderMetadataValue, tryFormatLongJSONValue } from '../../workloads/shared/detailHelpers'
 import { configSingularLabel, isImplementedConfigTab, toConfigAPIKind } from '../configKinds'
@@ -65,6 +66,7 @@ export default function ConfigDetailPanel({
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const resourceLabel = configSingularLabel(configTab)
   const configKey = `${configTab}:${selectedResource.namespace}/${selectedResource.name}`
@@ -76,6 +78,7 @@ export default function ConfigDetailPanel({
     setYamlSaving(false)
     setDeletePending(false)
     setDeleteError(null)
+    setDeleteConfirmOpen(false)
     setMetadataOpenSections({
       labels: true,
       annotations: true,
@@ -183,14 +186,18 @@ export default function ConfigDetailPanel({
     })
   }
 
+  const requestDeleteResource = () => {
+    if (!isImplementedConfigTab(configTab) || deletePending) {
+      return
+    }
+    setDeleteConfirmOpen(true)
+  }
+
   const deleteResource = () => {
     if (!isImplementedConfigTab(configTab) || deletePending) {
       return
     }
-    const confirmed = window.confirm(`Delete ${resourceLabel} "${selectedResource.name}" in namespace "${selectedResource.namespace}"?`)
-    if (!confirmed) {
-      return
-    }
+    setDeleteConfirmOpen(false)
     setDeletePending(true)
     setDeleteError(null)
     void DeleteWorkloadResource(
@@ -218,7 +225,7 @@ export default function ConfigDetailPanel({
           <button
             type="button"
             className="pods-detail-icon-btn danger"
-            onClick={deleteResource}
+            onClick={requestDeleteResource}
             title={`Delete ${resourceLabel}`}
             aria-label={`Delete ${resourceLabel}`}
             disabled={deletePending}
@@ -294,6 +301,7 @@ export default function ConfigDetailPanel({
                 value={yamlValue}
                 minHeight={0}
                 className="pods-detail-manifest-editor"
+                editSessionKey={configKey}
                 onChange={next => {
                   setYamlValue(next)
                   setYamlDirty(true)
@@ -385,6 +393,25 @@ export default function ConfigDetailPanel({
           </>
         )}
       </div>
+      {deleteConfirmOpen && (
+        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>
+            Delete {resourceLabel.toLowerCase()} <strong>{selectedResource.name}</strong> in
+            {' '}
+            <strong>{selectedResource.namespace}</strong>
+            {' '}
+            namespace?
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={deleteResource} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }

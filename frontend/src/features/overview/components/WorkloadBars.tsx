@@ -3,6 +3,7 @@ import './WorkloadBars.css'
 
 interface Props {
   workloads: WorkloadCounts
+  maxReference?: number
 }
 
 type WorkloadKey = 'pods' | 'deployments' | 'replicaSets' | 'statefulSets' | 'daemonSets' | 'jobs' | 'cronJobs'
@@ -51,8 +52,8 @@ function getSegments(count: number, status: WorkloadCounts['statuses'][WorkloadS
     .filter(segment => segment.width > 0)
 }
 
-export default function WorkloadBars({ workloads }: Props) {
-  const maxCount = Math.max(1, ...WORKLOAD_CONFIG.map(w => workloads[w.key]))
+export default function WorkloadBars({ workloads, maxReference }: Props) {
+  const maxCount = Math.max(1, maxReference ?? 0)
 
   return (
     <div className="workload-section">
@@ -60,7 +61,7 @@ export default function WorkloadBars({ workloads }: Props) {
       <div className="workload-bars">
         {WORKLOAD_CONFIG.map(w => {
           const count = workloads[w.key]
-          const pct = (count / maxCount) * 100
+          const pct = Math.min(100, (count / maxCount) * 100)
           const hasInfo = count > 0
           const status = workloads.statuses[w.statusKey]
           const segments = getSegments(count, status, w.color)

@@ -18,6 +18,27 @@ func ListClusters(basePath string) ([]ClusterInfo, error) {
 	if basePath == "" {
 		return nil, fmt.Errorf("base path not configured")
 	}
+	info, err := os.Stat(basePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []ClusterInfo{}, nil
+		}
+		return nil, fmt.Errorf("failed to read path: %w", err)
+	}
+
+	if !info.IsDir() {
+		filename := filepath.Base(basePath)
+		if !isKubeconfig(filename) {
+			return []ClusterInfo{}, nil
+		}
+		cluster := ClusterInfo{
+			Name:         strings.TrimSuffix(strings.TrimSuffix(filename, filepath.Ext(filename)), "."),
+			Filename:     filename,
+			HealthStatus: checkClusterHealth(basePath),
+		}
+		return []ClusterInfo{cluster}, nil
+	}
+
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read directory: %w", err)
@@ -64,7 +85,11 @@ func SaveCluster(basePath, name, content string) error {
 	if basePath == "" {
 		return fmt.Errorf("base path not configured")
 	}
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	targetDir := basePath
+	if info, err := os.Stat(basePath); err == nil && !info.IsDir() {
+		targetDir = filepath.Dir(basePath)
+	}
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return err
 	}
 	filename := sanitizeFilename(name)
@@ -74,7 +99,7 @@ func SaveCluster(basePath, name, content string) error {
 	if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") && !strings.HasSuffix(filename, ".json") {
 		filename += ".yaml"
 	}
-	p, err := safeJoin(basePath, filename)
+	p, err := safeJoin(targetDir, filename)
 	if err != nil {
 		return err
 	}
@@ -85,7 +110,7 @@ func RenameCluster(basePath, oldFilename, newName string) (string, error) {
 	if basePath == "" {
 		return "", fmt.Errorf("base path not configured")
 	}
-	oldPath, err := safeJoin(basePath, oldFilename)
+	oldPath, err := resolveClusterPath(basePath, oldFilename)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +120,7 @@ func RenameCluster(basePath, oldFilename, newName string) (string, error) {
 		return "", fmt.Errorf("cluster name is invalid")
 	}
 	newFilename := sanitized + ext
-	newPath, err := safeJoin(basePath, newFilename)
+	newPath, err := resolveClusterPath(basePath, newFilename)
 	if err != nil {
 		return "", err
 	}
@@ -115,7 +140,7 @@ func DeleteCluster(basePath, filename string) error {
 	if basePath == "" {
 		return fmt.Errorf("base path not configured")
 	}
-	p, err := safeJoin(basePath, filename)
+	p, err := resolveClusterPath(basePath, filename)
 	if err != nil {
 		return err
 	}
@@ -126,7 +151,7 @@ func ReadClusterConfig(basePath, filename string) (string, error) {
 	if basePath == "" {
 		return "", fmt.Errorf("base path not configured")
 	}
-	p, err := safeJoin(basePath, filename)
+	p, err := resolveClusterPath(basePath, filename)
 	if err != nil {
 		return "", err
 	}
@@ -142,7 +167,7 @@ func UpdateClusterConfig(basePath, filename, content string) error {
 	if basePath == "" {
 		return fmt.Errorf("base path not configured")
 	}
-	p, err := safeJoin(basePath, filename)
+	p, err := resolveClusterPath(basePath, filename)
 	if err != nil {
 		return err
 	}
@@ -152,6 +177,22 @@ func UpdateClusterConfig(basePath, filename, content string) error {
 func GetKubeconfigPath(basePath, filename string) (string, error) {
 	if basePath == "" {
 		return "", fmt.Errorf("base path not configured")
+	}
+	return resolveClusterPath(basePath, filename)
+}
+
+func resolveClusterPath(basePath, filename string) (string, error) {
+	info, err := os.Stat(basePath)
+	if err == nil && !info.IsDir() {
+		baseFilename := filepath.Base(basePath)
+		targetFilename := strings.TrimSpace(filename)
+		if targetFilename == "" || targetFilename == baseFilename {
+			return basePath, nil
+		}
+		return safeJoin(filepath.Dir(basePath), targetFilename)
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to read path: %w", err)
 	}
 	return safeJoin(basePath, filename)
 }
@@ -167,6 +208,9 @@ func safeJoin(basePath, filename string) (string, error) {
 
 func isKubeconfig(name string) bool {
 	lower := strings.ToLower(name)
+	if lower == "config" {
+		return true
+	}
 	return strings.HasSuffix(lower, ".yaml") ||
 		strings.HasSuffix(lower, ".yml") ||
 		strings.HasSuffix(lower, ".json") ||

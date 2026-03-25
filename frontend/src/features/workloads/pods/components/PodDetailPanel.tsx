@@ -3,6 +3,7 @@ import type { PodResource, PodDetail, PodDetailContainer, PodLogLine } from '../
 import { DeletePodResource, ExecPodCommand, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
 import { getAgeLabel, parsePhase, toPercent } from '../../../../shared/utils/formatting'
 import { toPodExecResult, toPodLogLines } from '../../../../shared/utils/normalization'
+import Modal from '../../../../shared/components/Modal'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import {
   valueToneClass,
@@ -209,6 +210,7 @@ export default function PodDetailPanel({
   const [logsActionError, setLogsActionError] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [initLogsModal, setInitLogsModal] = useState<{ key: string; containerName: string } | null>(null)
   const [initLogsDataByKey, setInitLogsDataByKey] = useState<Record<string, PodLogLine[]>>({})
   const [initLogsLoadingByKey, setInitLogsLoadingByKey] = useState<Record<string, boolean>>({})
@@ -375,6 +377,7 @@ export default function PodDetailPanel({
     setLogsActionError(null)
     setDeletePending(false)
     setDeleteError(null)
+    setDeleteConfirmOpen(false)
     setInitLogsModal(null)
     setInitLogsDataByKey({})
     setInitLogsLoadingByKey({})
@@ -643,15 +646,19 @@ export default function PodDetailPanel({
     }
   }
 
+  const requestDeletePod = () => {
+    if (deletePending) {
+      return
+    }
+    setDeleteConfirmOpen(true)
+  }
+
   const deletePod = () => {
     if (deletePending) {
       return
     }
-    const confirmed = window.confirm(`Delete pod "${selectedPod.name}" in namespace "${selectedPod.namespace}"?`)
-    if (!confirmed) {
-      return
-    }
 
+    setDeleteConfirmOpen(false)
     setDeletePending(true)
     setDeleteError(null)
     void DeletePodResource(
@@ -1754,12 +1761,6 @@ export default function PodDetailPanel({
               shellInputRef.current?.focus()
             }}
           >
-            {shell.entries.length === 0 && !terminalUnavailable && !shell.error && (
-              <div className="pods-shell-welcome">
-                <span className="pods-shell-welcome-prompt">$_ </span>
-                Connected to <strong>{shellContainerName}</strong> in pod <strong>{selectedPod.name}</strong>
-              </div>
-            )}
             {shell.error && !terminalUnavailable && (
               <div className="pods-shell-error-line">{shell.error}</div>
             )}
@@ -1917,7 +1918,7 @@ export default function PodDetailPanel({
           <button
             type="button"
             className="pods-detail-icon-btn danger"
-            onClick={deletePod}
+            onClick={requestDeletePod}
             title="Delete pod"
             aria-label="Delete pod"
             disabled={deletePending}
@@ -2392,6 +2393,20 @@ export default function PodDetailPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {deleteConfirmOpen && (
+        <Modal title="Confirm Delete Pod" onClose={() => setDeleteConfirmOpen(false)}>
+          <p>Delete pod <strong>{selectedPod.name}</strong> in <strong>{selectedPod.namespace}</strong> namespace?</p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={deletePod} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
       )}
 
     </section>

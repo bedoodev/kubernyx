@@ -65,6 +65,10 @@ interface TerminalTabState {
 
 type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId | NetworkDetailsTabId | NodeDetailsTabId
 
+function shouldAutoPinFromDetailInteraction(tab: DetailPanelTabId): boolean {
+  return tab === 'logs' || tab === 'shell'
+}
+
 function getPodDetailTabId(clusterFilename: string, pod: PodResource): string {
   return `pod:${clusterFilename}:${pod.namespace}:${pod.name}`
 }
@@ -660,6 +664,17 @@ export default function App() {
       return
     }
     setDetailPanelTabByPodTabId(current => ({ ...current, [activePodDetailTabId]: tab }))
+    if (shouldAutoPinFromDetailInteraction(tab)) {
+      setPodDetailTabs(current => {
+        const index = current.findIndex(item => item.id === activePodDetailTabId)
+        if (index < 0 || current[index].pinned) {
+          return current
+        }
+        const next = [...current]
+        next[index] = { ...next[index], pinned: true }
+        return next
+      })
+    }
   }, [activePodDetailTabId])
 
   const handleToggleDetailMinimize = useCallback(() => {
@@ -1203,6 +1218,7 @@ export default function App() {
                 cluster={activeTab.cluster}
                 overview={activeTab.overview}
                 workloads={activeTab.workloads}
+                workloadsMaxReference={activeTab.workloadScaleMax}
                 nodeFilter={activeTab.nodeFilter}
                 selectedNamespaces={activeTab.selectedNamespaces}
                 loading={activeTab.loading}
@@ -1352,6 +1368,7 @@ export default function App() {
             tabs={terminalPanelTabs}
             activeTabId={resolvedActiveTerminalTabId}
             collapsed={terminalCollapsed}
+            onCreateTab={handleOpenClusterTerminal}
             onSelectTab={handleSelectTerminalTab}
             onCloseTab={handleCloseClusterTerminalTab}
             onRenameTab={handleRenameClusterTerminalTab}

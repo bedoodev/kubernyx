@@ -2,8 +2,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-top: 1px solid #2b2b2b;
-  background: #1e1e1e;
+  border-top: 1px solid #2c3e64;
+  background: radial-gradient(120% 120% at 50% 0%, #131f38 0%, #0a1120 70%);
 }
 
 .cluster-terminal-panel.collapsed {
@@ -44,8 +44,8 @@
   justify-content: space-between;
   gap: 8px;
   padding: 0 10px;
-  border-bottom: 1px solid #2b2b2b;
-  background: #252526;
+  border-bottom: 1px solid #2c3e64;
+  background: linear-gradient(180deg, #1c2947 0%, #141f36 100%);
 }
 
 .cluster-terminal-panel.collapsed .cluster-terminal-header {
@@ -78,8 +78,33 @@
   border-bottom: 1px solid transparent;
 }
 
+.cluster-terminal-tab-add {
+  width: 26px;
+  height: 26px;
+  margin: 2px 0 0 2px;
+  border: 1px solid rgba(92, 120, 170, 0.45);
+  border-radius: 6px;
+  background: rgba(20, 34, 63, 0.72);
+  color: #a9c2ee;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cluster-terminal-tab-add svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cluster-terminal-tab-add:hover {
+  border-color: rgba(122, 151, 214, 0.8);
+  background: rgba(52, 79, 129, 0.5);
+  color: #edf4ff;
+}
+
 .cluster-terminal-tab-wrap.active {
-  border-bottom-color: #3794ff;
+  border-bottom-color: #58a6ff;
 }
 
 .cluster-terminal-tab {
@@ -88,7 +113,7 @@
   height: 30px;
   border: 0;
   background: transparent;
-  color: #bdbdbd;
+  color: #94a6c8;
   padding: 0 6px 0 8px;
   font-size: 12px;
   font-weight: 600;
@@ -123,7 +148,7 @@
 }
 
 .cluster-terminal-tab.active {
-  color: #ffffff;
+  color: #eaf2ff;
 }
 
 .cluster-terminal-tab-close {
@@ -132,7 +157,7 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #8f8f8f;
+  color: #7e90b3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -146,16 +171,16 @@
 
 .cluster-terminal-tab-wrap:hover .cluster-terminal-tab-close,
 .cluster-terminal-tab-wrap.active .cluster-terminal-tab-close {
-  color: #c8c8c8;
+  color: #c6d8ff;
 }
 
 .cluster-terminal-tab-close:hover {
-  background: #2d2d30;
+  background: rgba(88, 118, 170, 0.35);
   color: #ffffff;
 }
 
 .cluster-terminal-cluster {
-  color: #9e9e9e;
+  color: #93a9cf;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.3px;
@@ -178,7 +203,7 @@
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: #bdbdbd;
+  color: #b8c8e8;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -190,8 +215,8 @@
 }
 
 .cluster-terminal-icon-btn:hover {
-  border-color: #3b3b3b;
-  background: #2d2d30;
+  border-color: #415b8c;
+  background: rgba(71, 99, 151, 0.35);
   color: #ffffff;
 }
 
@@ -207,13 +232,19 @@
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
-  color: #d4d4d4;
-  background: #1e1e1e;
+  color: #d6e2ff;
+  background: linear-gradient(180deg, rgba(6, 17, 38, 0.94), rgba(5, 12, 26, 0.98));
+  user-select: text;
 }
 
 .cluster-terminal-welcome {
-  color: #7f7f7f;
-  font-style: italic;
+  color: #90a3c7;
+  padding: 6px 0 2px;
+}
+
+.cluster-terminal-welcome code {
+  color: #6ae2a4;
+  font-family: var(--font-mono);
 }
 
 .cluster-terminal-block {
@@ -228,27 +259,38 @@
 }
 
 .cluster-terminal-prompt {
-  color: #d4d4d4;
+  color: #64e5a8;
 }
 
 .cluster-terminal-sep {
-  color: #9b9b9b;
+  color: #8ca3cc;
+}
+
+.cluster-terminal-context {
+  color: #73b6ff;
+}
+
+.cluster-terminal-cwd {
+  color: #e5d889;
 }
 
 .cluster-terminal-cmd {
-  color: #d4d4d4;
+  color: #dce8ff;
 }
 
 .cluster-terminal-stdout,
 .cluster-terminal-stderr {
   margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  user-select: text;
 }
 
 .cluster-terminal-stdout {
-  color: #d4d4d4;
+  color: #d5e4ff;
 }
 
 .cluster-terminal-stderr {
@@ -256,7 +298,7 @@
 }
 
 .cluster-terminal-running {
-  color: #9cdcfe;
+  color: #9fd5ff;
   font-style: italic;
 }
 
@@ -266,8 +308,8 @@
   gap: 5px;
   min-height: 34px;
   padding: 6px 12px;
-  border-top: 1px solid #2b2b2b;
-  background: #1e1e1e;
+  border-top: 1px solid #2c3e64;
+  background: linear-gradient(180deg, rgba(15, 27, 52, 0.95), rgba(9, 18, 36, 0.95));
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -278,13 +320,13 @@
   border: 0;
   outline: 0;
   background: transparent;
-  color: #d4d4d4;
+  color: #e6f1ff;
   font-family: inherit;
   font-size: inherit;
 }
 
 .cluster-terminal-input::placeholder {
-  color: #6f6f6f;
+  color: #6f88b3;
 }
 
 .cluster-terminal-input:disabled {

@@ -5,6 +5,8 @@ interface Props {
   value: string
   onChange?: (next: string) => void
   readOnly?: boolean
+  requireExplicitEdit?: boolean
+  editSessionKey?: string
   minHeight?: number
   title?: string
   className?: string
@@ -118,6 +120,8 @@ const YamlEditor = memo(function YamlEditor({
   value,
   onChange,
   readOnly = false,
+  requireExplicitEdit = true,
+  editSessionKey,
   minHeight = 360,
   title = 'YAML',
   className,
@@ -130,7 +134,9 @@ const YamlEditor = memo(function YamlEditor({
   const [searchValue, setSearchValue] = useState('')
   const [searchMatchIndex, setSearchMatchIndex] = useState(0)
   const [hasFocusedMatch, setHasFocusedMatch] = useState(false)
-  const isReadOnly = readOnly || !onChange
+  const [editUnlocked, setEditUnlocked] = useState(false)
+  const canEdit = Boolean(onChange) && !readOnly
+  const isReadOnly = !canEdit || (requireExplicitEdit && !editUnlocked)
   const searchQuery = searchValue.trim()
 
   const highlighted = useMemo(() => highlightYaml(value), [value])
@@ -232,6 +238,18 @@ const YamlEditor = memo(function YamlEditor({
     }
   }, [])
 
+  useEffect(() => {
+    if (!canEdit || !requireExplicitEdit) {
+      setEditUnlocked(false)
+    }
+  }, [canEdit, requireExplicitEdit])
+
+  useEffect(() => {
+    if (requireExplicitEdit) {
+      setEditUnlocked(false)
+    }
+  }, [editSessionKey, requireExplicitEdit])
+
   const stepToNextMatch = (direction: 1 | -1) => {
     if (searchMatches.length === 0) {
       return
@@ -288,6 +306,23 @@ const YamlEditor = memo(function YamlEditor({
               <span className="yaml-editor-search-count">{searchCounterLabel}</span>
             )}
           </div>
+          {canEdit && requireExplicitEdit && (
+            <button
+              type="button"
+              className={`yaml-editor-edit-btn ${editUnlocked ? 'is-active' : ''}`}
+              onClick={() => {
+                setEditUnlocked(current => {
+                  const next = !current
+                  if (next) {
+                    window.requestAnimationFrame(() => inputRef.current?.focus())
+                  }
+                  return next
+                })
+              }}
+            >
+              {editUnlocked ? 'Lock' : 'Edit'}
+            </button>
+          )}
           <span className="yaml-editor-badge">{isReadOnly ? 'READ ONLY' : 'EDITABLE'}</span>
         </div>
       </header>

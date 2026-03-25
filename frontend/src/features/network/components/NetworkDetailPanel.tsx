@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { DeploymentDetail, DeploymentResource, NetworkTabId } from '../../../shared/types'
 import { DeleteWorkloadResource, UpdateWorkloadManifest } from '../../../shared/api'
+import Modal from '../../../shared/components/Modal'
 import YamlEditor from '../../../shared/components/YamlEditor'
 import { valueToneClass } from '../../workloads/shared/detailHelpers'
 import { networkSingularLabel, toNetworkAPIKind } from '../networkKinds'
@@ -55,6 +56,7 @@ export default function NetworkDetailPanel({
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   const resourceLabel = networkSingularLabel(networkTab)
   const resourceKey = `${networkTab}:${selectedResource.namespace}/${selectedResource.name}`
@@ -66,6 +68,7 @@ export default function NetworkDetailPanel({
     setYamlSaving(false)
     setDeletePending(false)
     setDeleteError(null)
+    setDeleteConfirmOpen(false)
   }, [resourceKey])
 
   useEffect(() => {
@@ -99,7 +102,18 @@ export default function NetworkDetailPanel({
     }
   }
 
+  const requestDelete = () => {
+    if (deletePending) {
+      return
+    }
+    setDeleteConfirmOpen(true)
+  }
+
   const handleDelete = async () => {
+    if (deletePending) {
+      return
+    }
+    setDeleteConfirmOpen(false)
     setDeletePending(true)
     setDeleteError(null)
     try {
@@ -179,7 +193,9 @@ export default function NetworkDetailPanel({
         ) : activeDetailsTab === 'yaml' ? (
           <div className="pod-detail-yaml-wrap">
             <YamlEditor
+              title={`${selectedResource.name}.yaml`}
               value={yamlValue}
+              editSessionKey={resourceKey}
               onChange={value => { setYamlValue(value); setYamlDirty(true) }}
             />
             <div className="pod-detail-yaml-actions">
@@ -285,7 +301,7 @@ export default function NetworkDetailPanel({
                   type="button"
                   className="pod-detail-delete-btn"
                   disabled={deletePending}
-                  onClick={handleDelete}
+                  onClick={requestDelete}
                 >
                   {deletePending ? 'Deleting...' : `Delete ${resourceLabel}`}
                 </button>
@@ -295,6 +311,25 @@ export default function NetworkDetailPanel({
           </div>
         )}
       </div>
+      {deleteConfirmOpen && (
+        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>
+            Delete {resourceLabel.toLowerCase()} <strong>{selectedResource.name}</strong> in
+            {' '}
+            <strong>{selectedResource.namespace}</strong>
+            {' '}
+            namespace?
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={handleDelete} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

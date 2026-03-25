@@ -9,6 +9,7 @@ interface Props {
   cluster: ClusterInfo
   overview: ClusterOverview | null
   workloads: WorkloadCounts | null
+  workloadsMaxReference: number
   nodeFilter: NodeFilter
   selectedNamespaces: string[]
   loading: boolean
@@ -23,7 +24,18 @@ const NODE_FILTERS: { value: NodeFilter; label: string }[] = [
   { value: 'worker', label: 'Worker' },
 ]
 
-export default function Overview({ cluster, overview, workloads, nodeFilter, selectedNamespaces, loading, error, onNodeFilterChange, onNamespacesChange }: Props) {
+export default function Overview({
+  cluster,
+  overview,
+  workloads,
+  workloadsMaxReference,
+  nodeFilter,
+  selectedNamespaces,
+  loading,
+  error,
+  onNodeFilterChange,
+  onNamespacesChange,
+}: Props) {
   if (loading) {
     return (
       <div className="overview-loading">
@@ -76,7 +88,7 @@ export default function Overview({ cluster, overview, workloads, nodeFilter, sel
         onChange={onNamespacesChange}
       />
 
-      {workloads && <WorkloadBars workloads={workloads} />}
+      {workloads && <WorkloadBars workloads={workloads} maxReference={workloadsMaxReference} />}
     </div>
   )
 }

@@ -12,6 +12,7 @@ import {
   UpdateWorkloadManifest,
 } from '../../../../shared/api'
 import { parsePhase } from '../../../../shared/utils/formatting'
+import Modal from '../../../../shared/components/Modal'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import type { NonPodWorkloadTabId } from '../../workloadKinds'
 import { toWorkloadAPIKind, workloadSingularLabel, supportsRestart } from '../../workloadKinds'
@@ -163,6 +164,7 @@ export default function DeploymentDetailPanel({
   const [yamlSuccess, setYamlSuccess] = useState<string | null>(null)
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [restartPending, setRestartPending] = useState(false)
   const [restartError, setRestartError] = useState<string | null>(null)
   const [restartSuccess, setRestartSuccess] = useState<string | null>(null)
@@ -246,6 +248,7 @@ export default function DeploymentDetailPanel({
     setYamlSaving(false)
     setDeletePending(false)
     setDeleteError(null)
+    setDeleteConfirmOpen(false)
     setCronActionPending(false)
     setCronActionError(null)
     setCronActionInfo(null)
@@ -485,15 +488,19 @@ export default function DeploymentDetailPanel({
     })
   }
 
+  const requestDeleteWorkload = () => {
+    if (deletePending) {
+      return
+    }
+    setDeleteConfirmOpen(true)
+  }
+
   const deleteWorkload = () => {
     if (deletePending) {
       return
     }
-    const confirmed = window.confirm(`Delete ${workloadLabel} "${selectedDeployment.name}" in namespace "${selectedDeployment.namespace}"?`)
-    if (!confirmed) {
-      return
-    }
 
+    setDeleteConfirmOpen(false)
     setDeletePending(true)
     setDeleteError(null)
     const operation = workloadTab === 'deployments'
@@ -940,7 +947,7 @@ export default function DeploymentDetailPanel({
           <button
             type="button"
             className="pods-detail-icon-btn danger"
-            onClick={deleteWorkload}
+            onClick={requestDeleteWorkload}
             title={`Delete ${workloadLabel}`}
             aria-label={`Delete ${workloadLabel}`}
             disabled={deletePending}
@@ -1056,6 +1063,7 @@ export default function DeploymentDetailPanel({
                 value={yamlValue}
                 minHeight={0}
                 className="pods-detail-manifest-editor"
+                editSessionKey={deploymentKey}
                 onChange={next => {
                   setYamlValue(next)
                   setYamlDirty(true)
@@ -1517,6 +1525,25 @@ export default function DeploymentDetailPanel({
           </>
         )}
       </div>
+      {deleteConfirmOpen && (
+        <Modal title={`Confirm Delete ${workloadLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>
+            Delete {workloadLabel.toLowerCase()} <strong>{selectedDeployment.name}</strong> in
+            {' '}
+            <strong>{selectedDeployment.namespace}</strong>
+            {' '}
+            namespace?
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={deleteWorkload} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }
