@@ -5,7 +5,7 @@
 <h1 align="center">Kubernyx</h1>
 
 <p align="center">
-  <strong>A desktop Kubernetes IDE that feels like home.</strong><br/>
+  <strong>A desktop Kubernetes IDE</strong><br/>
   Fast & Focused
 </p>
 
