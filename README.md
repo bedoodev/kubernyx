@@ -220,6 +220,12 @@ Output: `build/bin/kubernyx.app` — a native macOS application bundle.
 open build/bin/kubernyx.app
 ```
 
+### 5️⃣ Install with Brew
+
+```bash
+brew install --cask bedoodev/kubernyx/kubernyx
+```
+
 ### 📋 All commands
 
 | Command | What it does |
