@@ -1,9 +1,29 @@
 package terminal
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestFindExecutableInPath(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	executablePath := filepath.Join(dir, "kubectl")
+	if err := os.WriteFile(executablePath, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatalf("write executable: %v", err)
+	}
+
+	resolved, ok := findExecutableInPath("kubectl", strings.Join([]string{t.TempDir(), dir}, string(os.PathListSeparator)))
+	if !ok {
+		t.Fatal("expected kubectl to resolve from search path")
+	}
+	if resolved != executablePath {
+		t.Fatalf("expected %q, got %q", executablePath, resolved)
+	}
+}
 
 func TestBuildCommandSpecForPod(t *testing.T) {
 	t.Parallel()
@@ -19,7 +39,7 @@ func TestBuildCommandSpecForPod(t *testing.T) {
 		t.Fatalf("build pod command spec: %v", err)
 	}
 
-	if spec.Command != "kubectl" {
+	if filepath.Base(spec.Command) != "kubectl" {
 		t.Fatalf("expected kubectl command, got %q", spec.Command)
 	}
 
