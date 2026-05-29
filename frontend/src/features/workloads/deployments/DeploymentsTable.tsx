@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import type { DeploymentResource } from '../../../shared/types'
+import type { BatchDeleteResult, DeploymentResource } from '../../../shared/types'
+import { DeleteResourcesBatch } from '../../../shared/api'
+import Modal from '../../../shared/components/Modal'
 import { formatAgeFromUnix, parsePhase } from '../../../shared/utils/formatting'
+import { toBatchDeleteResult } from '../../../shared/utils/normalization'
 import { useDragResize } from '../../../shared/hooks/useDragResize'
 import { useDeployments } from './hooks/useDeployments'
 import type { NonPodWorkloadTabId } from '../workloadKinds'
-import { workloadPluralLabel } from '../workloadKinds'
+import { toWorkloadAPIKind, workloadPluralLabel, workloadSingularLabel } from '../workloadKinds'
 import '../pods/PodsTable.css'
 
 interface Props {
@@ -17,6 +20,7 @@ interface Props {
 }
 
 const STATUS_ALL = 'all'
+const SELECT_COLUMN_WIDTH = 52
 const PAGE_SIZE_OPTIONS = [20, 50] as const
 
 type DeploymentColumnKey =
@@ -138,7 +142,7 @@ function formatStatusOption(option: string): string {
   return option.charAt(0).toUpperCase() + option.slice(1)
 }
 
-function getDeploymentKey(item: DeploymentResource): string {
+function getDeploymentKey(item: Pick<DeploymentResource, 'namespace' | 'name'>): string {
   return `${item.namespace}/${item.name}`
 }
 
@@ -199,6 +203,11 @@ export default function DeploymentsTable({
   const [tableViewportWidth, setTableViewportWidth] = useState(0)
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1)
   const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000))
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteResult, setDeleteResult] = useState<BatchDeleteResult | null>(null)
 
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement | null>(null)
@@ -253,7 +262,7 @@ export default function DeploymentsTable({
   }, [])
 
   const tableMinWidth = useMemo(
-    () => visibleColumns.reduce((total, column) => total + columnWidths[column.key], 0),
+    () => SELECT_COLUMN_WIDTH + visibleColumns.reduce((total, column) => total + columnWidths[column.key], 0),
     [columnWidths, visibleColumns],
   )
   const tableWidth = Math.max(tableMinWidth, tableViewportWidth)
@@ -434,18 +443,101 @@ export default function DeploymentsTable({
     setFocusedRowIndex(-1)
   }, [page, search, statusFilter, sortKey, sortDir])
 
+  useEffect(() => {
+    setSelectedKeys([])
+  }, [clusterFilename, search, selectedNamespaces, statusFilter, workloadTab])
+
+  useEffect(() => {
+    const validKeys = new Set(items.map(getDeploymentKey))
+    setSelectedKeys(current => current.filter(key => validKeys.has(key)))
+  }, [items])
+
   const rowCountLabel = loading ? '...' : String(sortedItems.length)
   const emptyStateMessage = selectedNamespaces.length === 0
     ? 'Select at least one namespace.'
     : `No ${pluralLabel.toLowerCase()} found`
+  const selectedCount = selectedKeys.length
+  const visibleKeys = pagedItems.map(getDeploymentKey)
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every(key => selectedKeys.includes(key))
+  const selectedResources = sortedItems.filter(item => selectedKeys.includes(getDeploymentKey(item)))
+  const resourceLabel = workloadSingularLabel(workloadTab)
+
+  const toggleRowSelection = (key: string) => {
+    setSelectedKeys(current => (
+      current.includes(key)
+        ? current.filter(item => item !== key)
+        : [...current, key]
+    ))
+  }
+
+  const toggleVisibleSelection = () => {
+    setSelectedKeys(current => {
+      if (allVisibleSelected) {
+        const visibleSet = new Set(visibleKeys)
+        return current.filter(key => !visibleSet.has(key))
+      }
+      const next = new Set(current)
+      for (const key of visibleKeys) {
+        next.add(key)
+      }
+      return Array.from(next)
+    })
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedResources.length === 0 || deletePending) {
+      return
+    }
+
+    setDeletePending(true)
+    setDeleteError(null)
+    try {
+      const response = await DeleteResourcesBatch(
+        clusterFilename,
+        toWorkloadAPIKind(workloadTab),
+        selectedResources.map(item => ({
+          namespace: item.namespace,
+          name: item.name,
+        })),
+      )
+      const result = toBatchDeleteResult(response)
+      setDeleteResult(result)
+      setSelectedKeys(current => {
+        const failedKeys = new Set(result.failed.map(item => getDeploymentKey(item)))
+        return current.filter(key => failedKeys.has(key))
+      })
+      setDeleteConfirmOpen(false)
+    } catch (errorValue: unknown) {
+      setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    } finally {
+      setDeletePending(false)
+    }
+  }
 
   return (
     <div className={`pods-table-root ${(columnResize.isResizing) ? 'resizing' : ''}`}>
       <div className="pods-content">
         <div className="pods-table-pane">
           <div className="pods-toolbar">
-            <div className="pods-resource-count">
-              <strong>{rowCountLabel}</strong>
+            <div className="pods-toolbar-meta">
+              <div className="pods-resource-count" aria-label={`${rowCountLabel} visible ${pluralLabel.toLowerCase()}`}>
+                <strong>{rowCountLabel}</strong>
+                <span>visible</span>
+              </div>
+              {selectedCount > 0 && (
+                <div className="pods-bulk-actions">
+                  <span className="pods-bulk-count">
+                    <strong>{selectedCount}</strong>
+                    <span>selected</span>
+                  </span>
+                  <button type="button" className="pods-bulk-btn" onClick={toggleVisibleSelection}>
+                    {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+                  </button>
+                  <button type="button" className="pods-bulk-btn danger" onClick={() => setDeleteConfirmOpen(true)}>
+                    Delete selected
+                  </button>
+                </div>
+              )}
             </div>
             <input
               className="pods-search"
@@ -491,12 +583,24 @@ export default function DeploymentsTable({
           <div className="pods-table-wrap" ref={tableWrapRef} tabIndex={0} onKeyDown={handleTableKeyDown}>
             <table className="pods-table" style={{ width: `${tableWidth}px`, minWidth: `${tableWidth}px` }}>
               <colgroup>
+                <col style={{ width: `${SELECT_COLUMN_WIDTH}px` }} />
                 {visibleColumns.map(column => (
                   <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
                 ))}
               </colgroup>
               <thead>
                 <tr>
+                  <th className="pods-select-col">
+                    <div className="pods-th-content">
+                      <input
+                        type="checkbox"
+                        className="pods-row-checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleVisibleSelection}
+                        aria-label="Select visible rows"
+                      />
+                    </div>
+                  </th>
                   {visibleColumns.map((column, index) => (
                     <th key={column.key}>
                       <div className="pods-th-content">
@@ -542,27 +646,37 @@ export default function DeploymentsTable({
               <tbody ref={tableBodyRef}>
                 {error ? (
                   <tr>
-                    <td colSpan={visibleColumns.length} className="pods-empty-row error">{error}</td>
+                    <td colSpan={visibleColumns.length + 1} className="pods-empty-row error">{error}</td>
                   </tr>
                 ) : loading ? (
                   <tr>
-                    <td colSpan={visibleColumns.length} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td>
+                    <td colSpan={visibleColumns.length + 1} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td>
                   </tr>
                 ) : sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={visibleColumns.length} className="pods-empty-row">{emptyStateMessage}</td>
+                    <td colSpan={visibleColumns.length + 1} className="pods-empty-row">{emptyStateMessage}</td>
                   </tr>
                 ) : (
                   pagedItems.map((item, index) => {
                     const key = getDeploymentKey(item)
                     const isSelected = externalSelectedDeploymentKey === key
                     const isFocused = focusedRowIndex === index
+                    const isChecked = selectedKeys.includes(key)
                     const activateDeploymentFromNameCell = (event: ReactMouseEvent<HTMLElement>) => {
                       const pin = event.detail >= 2
                       onDeploymentActivate?.(item, { pin })
                     }
                     return (
                       <tr key={key} className={`${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}>
+                        <td className="pods-cell pods-select-col">
+                          <input
+                            type="checkbox"
+                            className="pods-row-checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleRowSelection(key)}
+                            aria-label={`Select ${item.name}`}
+                          />
+                        </td>
                         {visibleColumns.map(column => {
                           switch (column.key) {
                             case 'name':
@@ -677,6 +791,39 @@ export default function DeploymentsTable({
           </div>
         </div>
       </div>
+
+      {deleteConfirmOpen && (
+        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>Delete {selectedCount} selected {resourceLabel.toLowerCase()}{selectedCount === 1 ? '' : 's'}?</p>
+          {deleteError && (
+            <div className="pods-detail-alert error">{deleteError}</div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-danger" onClick={() => void handleDeleteSelected()} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleteResult && (
+        <Modal title="Bulk Delete Result" onClose={() => setDeleteResult(null)}>
+          <p>Deleted {deleteResult.deleted.length} {resourceLabel.toLowerCase()}{deleteResult.deleted.length === 1 ? '' : 's'}.</p>
+          {deleteResult.failed.length > 0 && (
+            <div className="pods-bulk-result">
+              {deleteResult.failed.map(item => (
+                <div key={getDeploymentKey(item)} className="pods-bulk-result-item">
+                  <strong>{item.namespace}/{item.name}</strong>
+                  <span>{item.error}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   )
 }

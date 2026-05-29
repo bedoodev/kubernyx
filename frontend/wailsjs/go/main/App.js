@@ -6,6 +6,10 @@ export function AddCluster(arg1, arg2) {
   return window['go']['main']['App']['AddCluster'](arg1, arg2);
 }
 
+export function CloseTerminalSession(arg1) {
+  return window['go']['main']['App']['CloseTerminalSession'](arg1);
+}
+
 export function CompleteClusterKubectl(arg1, arg2, arg3) {
   return window['go']['main']['App']['CompleteClusterKubectl'](arg1, arg2, arg3);
 }
@@ -28,6 +32,10 @@ export function DeleteDeploymentResource(arg1, arg2, arg3) {
 
 export function DeletePodResource(arg1, arg2, arg3) {
   return window['go']['main']['App']['DeletePodResource'](arg1, arg2, arg3);
+}
+
+export function DeleteResourcesBatch(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteResourcesBatch'](arg1, arg2, arg3);
 }
 
 export function DeleteWorkloadResource(arg1, arg2, arg3, arg4) {
@@ -110,6 +118,10 @@ export function RenameCluster(arg1, arg2) {
   return window['go']['main']['App']['RenameCluster'](arg1, arg2);
 }
 
+export function ResizeTerminalSession(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeTerminalSession'](arg1, arg2, arg3);
+}
+
 export function RestartWorkload(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['RestartWorkload'](arg1, arg2, arg3, arg4);
 }
@@ -146,6 +158,10 @@ export function StartPodsStream(arg1, arg2) {
   return window['go']['main']['App']['StartPodsStream'](arg1, arg2);
 }
 
+export function StartTerminalSession(arg1, arg2) {
+  return window['go']['main']['App']['StartTerminalSession'](arg1, arg2);
+}
+
 export function StopPodLogsStream() {
   return window['go']['main']['App']['StopPodLogsStream']();
 }
@@ -168,4 +184,8 @@ export function UpdateDeploymentManifest(arg1, arg2, arg3, arg4) {
 
 export function UpdateWorkloadManifest(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['UpdateWorkloadManifest'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function WriteTerminalInput(arg1, arg2) {
+  return window['go']['main']['App']['WriteTerminalInput'](arg1, arg2);
 }

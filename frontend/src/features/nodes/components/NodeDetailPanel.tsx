@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { NodeDetail, NodeResource } from '../../../shared/types'
 import YamlEditor from '../../../shared/components/YamlEditor'
+import TerminalSessionView from '../../terminal/TerminalSessionView'
 import '../../workloads/pods/PodsTable.css'
 
-export type NodeDetailsTabId = 'overview' | 'yaml'
+export type NodeDetailsTabId = 'overview' | 'shell' | 'yaml'
 
 interface Props {
   clusterFilename: string
@@ -22,6 +23,7 @@ interface Props {
 
 const DETAIL_TABS: Array<{ id: NodeDetailsTabId; label: string }> = [
   { id: 'overview', label: 'Overview' },
+  { id: 'shell', label: 'Shell' },
   { id: 'yaml', label: 'YAML' },
 ]
 
@@ -30,6 +32,7 @@ function mapEntries(value: Record<string, string>): Array<[string, string]> {
 }
 
 export default function NodeDetailPanel({
+  clusterFilename,
   mode,
   activeDetailsTab,
   onDetailsTabChange,
@@ -125,6 +128,19 @@ export default function NodeDetailPanel({
       <div className="pod-detail-body">
         {nodeDetailError ? (
           <div className="pods-empty-row error">{nodeDetailError}</div>
+        ) : activeDetailsTab === 'shell' ? (
+          <section className="pods-detail-section pods-detail-shell-section">
+            <TerminalSessionView
+              key={`${clusterFilename}:${selectedNode.name}`}
+              target={{
+                kind: 'node',
+                filename: clusterFilename,
+                nodeName: selectedNode.name,
+              }}
+              active={activeDetailsTab === 'shell'}
+              className="pods-shell-terminal-session"
+            />
+          </section>
         ) : nodeDetailLoading && !nodeDetail ? (
           <div className="pods-empty-row">Loading node details...</div>
         ) : activeDetailsTab === 'yaml' ? (

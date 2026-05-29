@@ -12,7 +12,7 @@ import (
 )
 
 type Client struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 	metrics   *metricsv1beta1.Clientset
 	config    *rest.Config
 	nodes     []corev1.Node

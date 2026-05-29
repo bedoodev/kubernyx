@@ -21,6 +21,68 @@ export namespace cluster {
 
 export namespace kube {
 	
+	export class BatchDeleteFailure {
+	    namespace: string;
+	    name: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchDeleteFailure(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	        this.error = source["error"];
+	    }
+	}
+	export class ResourceRef {
+	    namespace: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.name = source["name"];
+	    }
+	}
+	export class BatchDeleteResult {
+	    deleted: ResourceRef[];
+	    failed: BatchDeleteFailure[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchDeleteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deleted = this.convertValues(source["deleted"], ResourceRef);
+	        this.failed = this.convertValues(source["failed"], BatchDeleteFailure);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ClusterEvent {
 	    type: string;
 	    reason: string;
@@ -835,6 +897,7 @@ export namespace kube {
 	    }
 	}
 	
+	
 	export class WorkloadPhaseCounts {
 	    running: number;
 	    pending: number;
@@ -948,6 +1011,33 @@ export namespace kube {
 		}
 	}
 	
+
+}
+
+export namespace terminal {
+	
+	export class Target {
+	    kind: string;
+	    filename: string;
+	    namespace?: string;
+	    podName?: string;
+	    container?: string;
+	    nodeName?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Target(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.filename = source["filename"];
+	        this.namespace = source["namespace"];
+	        this.podName = source["podName"];
+	        this.container = source["container"];
+	        this.nodeName = source["nodeName"];
+	    }
+	}
 
 }
 

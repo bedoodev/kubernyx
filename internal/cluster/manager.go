@@ -28,11 +28,11 @@ func ListClusters(basePath string) ([]ClusterInfo, error) {
 
 	if !info.IsDir() {
 		filename := filepath.Base(basePath)
-		if !isKubeconfig(filename) {
+		if !isKubeconfigFile(basePath) {
 			return []ClusterInfo{}, nil
 		}
 		cluster := ClusterInfo{
-			Name:         strings.TrimSuffix(strings.TrimSuffix(filename, filepath.Ext(filename)), "."),
+			Name:         displayClusterName(filename),
 			Filename:     filename,
 			HealthStatus: checkClusterHealth(basePath),
 		}
@@ -49,9 +49,13 @@ func ListClusters(basePath string) ([]ClusterInfo, error) {
 			continue
 		}
 		name := e.Name()
-		if isKubeconfig(name) {
+		clusterPath, joinErr := safeJoin(basePath, name)
+		if joinErr != nil {
+			continue
+		}
+		if isKubeconfigFile(clusterPath) {
 			clusters = append(clusters, ClusterInfo{
-				Name:         strings.TrimSuffix(strings.TrimSuffix(name, filepath.Ext(name)), "."),
+				Name:         displayClusterName(name),
 				Filename:     name,
 				HealthStatus: HealthRed,
 			})
@@ -206,18 +210,6 @@ func safeJoin(basePath, filename string) (string, error) {
 	return p, nil
 }
 
-func isKubeconfig(name string) bool {
-	lower := strings.ToLower(name)
-	if lower == "config" {
-		return true
-	}
-	return strings.HasSuffix(lower, ".yaml") ||
-		strings.HasSuffix(lower, ".yml") ||
-		strings.HasSuffix(lower, ".json") ||
-		strings.HasSuffix(lower, ".conf") ||
-		strings.HasSuffix(lower, ".kubeconfig")
-}
-
 func sanitizeFilename(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.Map(func(r rune) rune {
@@ -226,5 +218,19 @@ func sanitizeFilename(name string) string {
 		}
 		return r
 	}, name)
+	return name
+}
+
+func displayClusterName(filename string) string {
+	name := filename
+	ext := filepath.Ext(filename)
+	if ext != "" && ext != filename {
+		name = strings.TrimSuffix(filename, ext)
+	}
+	name = strings.TrimSpace(strings.TrimSuffix(name, "."))
+	name = strings.TrimPrefix(name, ".")
+	if name == "" {
+		return filename
+	}
 	return name
 }

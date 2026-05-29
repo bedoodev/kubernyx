@@ -313,6 +313,36 @@
   color: #89a2d4;
 }
 
+.yaml-search-match {
+  position: relative;
+  display: inline;
+  margin: 0 -1px;
+  padding: 1px 2px;
+  border-radius: 4px;
+  background: rgba(245, 194, 92, 0.28);
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.yaml-search-match.is-active {
+  background: linear-gradient(180deg, rgba(255, 224, 112, 0.96), rgba(255, 173, 74, 0.92));
+  color: #07111f;
+  box-shadow:
+    0 0 0 1px rgba(255, 244, 184, 0.95),
+    0 0 0 4px rgba(255, 190, 75, 0.22),
+    0 8px 20px rgba(255, 168, 42, 0.18);
+}
+
+.yaml-search-match.is-active .yaml-token-key,
+.yaml-search-match.is-active .yaml-token-string,
+.yaml-search-match.is-active .yaml-token-number,
+.yaml-search-match.is-active .yaml-token-bool,
+.yaml-search-match.is-active .yaml-token-comment,
+.yaml-search-match.is-active .yaml-token-punc {
+  color: #07111f;
+}
+
 .yaml-editor.is-readonly .yaml-editor-input {
   cursor: text;
 }

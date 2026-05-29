@@ -21,8 +21,9 @@ interface Props {
   onDelete: (filename: string) => Promise<void>
   onReadConfig: (filename: string) => Promise<string>
   onUpdateConfig: (filename: string, content: string) => Promise<void>
-  onSettingsClick: () => void
   onOpenTerminal: (cluster: ClusterInfo) => void
+  onSettingsClick: () => void
+  onRefreshApp: () => void
 }
 
 type NavItem =
@@ -53,8 +54,9 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   onDelete,
   onReadConfig,
   onUpdateConfig,
-  onSettingsClick,
   onOpenTerminal,
+  onSettingsClick,
+  onRefreshApp,
 }, ref) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingConfigCluster, setEditingConfigCluster] = useState<ClusterInfo | null>(null)
@@ -317,6 +319,12 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             <button className="add-btn" onClick={() => setShowAddModal(true)} title="Add Cluster">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button className="refresh-btn" onClick={onRefreshApp} title="Refresh App (Cmd+Shift+R)" aria-label="Refresh app">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                <path d="M21 3v6h-6" />
               </svg>
             </button>
           </div>

@@ -109,11 +109,71 @@ function highlightLine(line: string): string {
   return result
 }
 
-function highlightYaml(value: string): string {
+function renderLineWithSearch(
+  line: string,
+  lineStart: number,
+  searchQuery: string,
+  searchMatches: number[],
+  activeMatchIndex: number,
+): string {
+  if (!searchQuery || searchMatches.length === 0) {
+    return highlightLine(line)
+  }
+
+  const lineEnd = lineStart + line.length
+  const queryLength = searchQuery.length
+  const lineMatches = searchMatches
+    .map((absoluteStart, matchIndex) => ({ absoluteStart, matchIndex }))
+    .filter(({ absoluteStart }) => absoluteStart >= lineStart && absoluteStart < lineEnd)
+
+  if (lineMatches.length === 0) {
+    return highlightLine(line)
+  }
+
+  let cursor = 0
+  let output = ''
+  for (const { absoluteStart, matchIndex } of lineMatches) {
+    const relativeStart = absoluteStart - lineStart
+    const relativeEnd = Math.min(line.length, relativeStart + queryLength)
+    if (relativeStart > cursor) {
+      output += highlightSearchSegment(line.slice(cursor, relativeStart))
+    }
+    const matchClass = matchIndex === activeMatchIndex
+      ? 'yaml-search-match is-active'
+      : 'yaml-search-match'
+    output += `<mark class="${matchClass}">${highlightSearchSegment(line.slice(relativeStart, relativeEnd))}</mark>`
+    cursor = relativeEnd
+  }
+
+  if (cursor < line.length) {
+    output += highlightSearchSegment(line.slice(cursor))
+  }
+  return output || ' '
+}
+
+function highlightYaml(
+  value: string,
+  searchQuery: string,
+  searchMatches: number[],
+  activeMatchIndex: number,
+): string {
   const lines = value.length === 0 ? [''] : value.split('\n')
-  return lines.map((line, index) =>
-    `<div class="yaml-line" data-ln="${index + 1}">${highlightLine(line)}</div>`
-  ).join('')
+  let lineStart = 0
+  return lines.map((line, index) => {
+    const html = renderLineWithSearch(line, lineStart, searchQuery, searchMatches, activeMatchIndex)
+    lineStart += line.length + 1
+    return `<div class="yaml-line" data-ln="${index + 1}">${html}</div>`
+  }).join('')
+}
+
+function highlightSearchSegment(segment: string): string {
+  if (segment.length === 0) {
+    return ''
+  }
+  if (segment.trim().length === 0) {
+    return escapeHtml(segment)
+  }
+  return highlightLine(segment)
 }
 
 const YamlEditor = memo(function YamlEditor({
@@ -139,10 +199,13 @@ const YamlEditor = memo(function YamlEditor({
   const isReadOnly = !canEdit || (requireExplicitEdit && !editUnlocked)
   const searchQuery = searchValue.trim()
 
-  const highlighted = useMemo(() => highlightYaml(value), [value])
   const searchMatches = useMemo(
     () => findSearchIndexes(value, searchQuery),
     [value, searchQuery],
+  )
+  const highlighted = useMemo(
+    () => highlightYaml(value, searchQuery, searchMatches, hasFocusedMatch ? searchMatchIndex : -1),
+    [hasFocusedMatch, searchMatchIndex, searchMatches, searchQuery, value],
   )
 
   const syncScrollNow = () => {
@@ -172,7 +235,7 @@ const YamlEditor = memo(function YamlEditor({
     scheduleSyncScroll()
   }, [value])
 
-  const focusSearchMatch = (index: number) => {
+  const scrollSearchMatchIntoView = (index: number) => {
     if (!searchQuery || searchMatches.length === 0) {
       return
     }
@@ -184,10 +247,16 @@ const YamlEditor = memo(function YamlEditor({
     if (typeof start !== 'number') {
       return
     }
-    const end = start + searchQuery.length
-    input.focus()
-    input.setSelectionRange(start, end)
-    scheduleSyncScroll()
+    const computedStyle = window.getComputedStyle(input)
+    const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 20
+    const padTop = Number.parseFloat(computedStyle.paddingTop) || 0
+    const lineIndex = value.slice(0, start).split('\n').length - 1
+    const targetTop = Math.max(0, padTop + (lineIndex * lineHeight) - (input.clientHeight * 0.38))
+
+    input.scrollTop = targetTop
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop = targetTop
+    }
   }
 
   useEffect(() => {
@@ -261,7 +330,8 @@ const YamlEditor = memo(function YamlEditor({
         : searchMatches.length - 1
     setSearchMatchIndex(nextIndex)
     setHasFocusedMatch(true)
-    focusSearchMatch(nextIndex)
+    scrollSearchMatchIntoView(nextIndex)
+    window.requestAnimationFrame(() => searchInputRef.current?.focus())
   }
 
   const searchCounterLabel = searchQuery.length === 0

@@ -60,7 +60,8 @@
 }
 
 .sidebar-toggle-btn,
-.add-btn {
+.add-btn,
+.refresh-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -72,9 +73,14 @@
 }
 
 .sidebar-toggle-btn:hover,
-.add-btn:hover {
+.add-btn:hover,
+.refresh-btn:hover {
   background: var(--bg-hover);
   color: var(--accent);
+}
+
+.refresh-btn {
+  border: 1px solid transparent;
 }
 
 .cluster-list {

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import type { PodResource } from '../../../shared/types'
+import type { BatchDeleteResult, PodResource } from '../../../shared/types'
+import { DeleteResourcesBatch } from '../../../shared/api'
+import Modal from '../../../shared/components/Modal'
 import { getAgeLabel, parsePhase } from '../../../shared/utils/formatting'
+import { toBatchDeleteResult } from '../../../shared/utils/normalization'
 import { useDragResize } from '../../../shared/hooks/useDragResize'
 import { usePodsStream } from './hooks/usePodsStream'
 import { usePodDetail } from './hooks/usePodDetail'
@@ -20,6 +23,7 @@ interface Props {
 const STATUS_ALL = 'all'
 const DETAIL_LEFT_MIN_WIDTH = 520
 const DETAIL_MIN_WIDTH = 420
+const SELECT_COLUMN_WIDTH = 52
 const PAGE_SIZE_OPTIONS = [20, 50] as const
 
 type PodColumnKey = 'name' | 'namespace' | 'cpu' | 'memory' | 'controlledBy' | 'status' | 'age'
@@ -55,7 +59,7 @@ function normalizeStatus(status: string): string {
   return parsePhase(status).toLowerCase()
 }
 
-function getPodKey(item: PodResource): string {
+function getPodKey(item: Pick<PodResource, 'namespace' | 'name'>): string {
   return `${item.namespace}/${item.name}`
 }
 
@@ -99,6 +103,11 @@ export default function PodsTable({
   const [detailsMaximized, setDetailsMaximized] = useState(false)
   const [statusFilterOpen, setStatusFilterOpen] = useState(false)
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1)
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteResult, setDeleteResult] = useState<BatchDeleteResult | null>(null)
 
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement | null>(null)
@@ -201,7 +210,7 @@ export default function PodsTable({
   }, [selectedPod])
 
   const tableMinWidth = useMemo(
-    () => POD_COLUMNS.reduce((total, column) => total + columnWidths[column.key], 0),
+    () => SELECT_COLUMN_WIDTH + POD_COLUMNS.reduce((total, column) => total + columnWidths[column.key], 0),
     [columnWidths],
   )
   const tableWidth = Math.max(tableMinWidth, tableViewportWidth)
@@ -299,6 +308,65 @@ export default function PodsTable({
   const emptyStateMessage = selectedNamespaces.length === 0
     ? 'Select at least one namespace.'
     : 'No pods found'
+  const selectedCount = selectedKeys.length
+  const visibleKeys = pagedItems.map(getPodKey)
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every(key => selectedKeys.includes(key))
+  const selectedPods = sortedItems.filter(item => selectedKeys.includes(getPodKey(item)))
+
+  const toggleRowSelection = (key: string) => {
+    setSelectedKeys(current => (
+      current.includes(key)
+        ? current.filter(item => item !== key)
+        : [...current, key]
+    ))
+  }
+
+  const toggleVisibleSelection = () => {
+    setSelectedKeys(current => {
+      if (allVisibleSelected) {
+        const visibleSet = new Set(visibleKeys)
+        return current.filter(key => !visibleSet.has(key))
+      }
+      const next = new Set(current)
+      for (const key of visibleKeys) {
+        next.add(key)
+      }
+      return Array.from(next)
+    })
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedPods.length === 0 || deletePending) {
+      return
+    }
+
+    setDeletePending(true)
+    setDeleteError(null)
+    try {
+      const response = await DeleteResourcesBatch(
+        clusterFilename,
+        'pod',
+        selectedPods.map(item => ({
+          namespace: item.namespace,
+          name: item.name,
+        })),
+      )
+      const result = toBatchDeleteResult(response)
+      setDeleteResult(result)
+      setSelectedKeys(current => {
+        const failedKeys = new Set(result.failed.map(item => getPodKey(item)))
+        return current.filter(key => failedKeys.has(key))
+      })
+      setDeleteConfirmOpen(false)
+      if (selectedPod && result.deleted.some(item => getPodKey(item) === getPodKey(selectedPod))) {
+        closePodDetails()
+      }
+    } catch (errorValue: unknown) {
+      setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    } finally {
+      setDeletePending(false)
+    }
+  }
 
   const handleColumnResizeStart = (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -387,13 +455,39 @@ export default function PodsTable({
     setFocusedRowIndex(-1)
   }, [page, search, statusFilter, sortKey, sortDir])
 
+  useEffect(() => {
+    setSelectedKeys([])
+  }, [clusterFilename, search, selectedNamespaces, statusFilter])
+
+  useEffect(() => {
+    const validKeys = new Set(items.map(getPodKey))
+    setSelectedKeys(current => current.filter(key => validKeys.has(key)))
+  }, [items])
+
   return (
     <div className={`pods-table-root ${showInlineDetails && selectedPod ? 'with-details' : ''} ${(columnResize.isResizing || detailsResize.isResizing) ? 'resizing' : ''}`}>
       <div className={`pods-content ${showInlineDetails && selectedPod ? 'with-details' : ''}`} ref={splitWrapRef}>
         <div className="pods-table-pane">
           <div className="pods-toolbar">
-            <div className="pods-resource-count">
-              <strong>{rowCountLabel}</strong>
+            <div className="pods-toolbar-meta">
+              <div className="pods-resource-count" aria-label={`${rowCountLabel} visible pods`}>
+                <strong>{rowCountLabel}</strong>
+                <span>visible</span>
+              </div>
+              {selectedCount > 0 && (
+                <div className="pods-bulk-actions">
+                  <span className="pods-bulk-count">
+                    <strong>{selectedCount}</strong>
+                    <span>selected</span>
+                  </span>
+                  <button type="button" className="pods-bulk-btn" onClick={toggleVisibleSelection}>
+                    {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+                  </button>
+                  <button type="button" className="pods-bulk-btn danger" onClick={() => setDeleteConfirmOpen(true)}>
+                    Delete selected
+                  </button>
+                </div>
+              )}
             </div>
             <input
               className="pods-search"
@@ -439,12 +533,24 @@ export default function PodsTable({
           <div className="pods-table-wrap" ref={tableWrapRef} tabIndex={0} onKeyDown={handleTableKeyDown}>
             <table className="pods-table" style={{ width: `${tableWidth}px`, minWidth: `${tableWidth}px` }}>
               <colgroup>
+                <col style={{ width: `${SELECT_COLUMN_WIDTH}px` }} />
                 {POD_COLUMNS.map(column => (
                   <col key={column.key} style={{ width: `${columnWidths[column.key]}px` }} />
                 ))}
               </colgroup>
               <thead>
                 <tr>
+                  <th className="pods-select-col">
+                    <div className="pods-th-content">
+                      <input
+                        type="checkbox"
+                        className="pods-row-checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleVisibleSelection}
+                        aria-label="Select visible rows"
+                      />
+                    </div>
+                  </th>
                   {POD_COLUMNS.map((column, index) => (
                     <th key={column.key}>
                       <div className="pods-th-content">
@@ -490,21 +596,22 @@ export default function PodsTable({
               <tbody ref={tableBodyRef}>
                 {loading ? (
                   <tr>
-                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row">Loading pods...</td>
+                    <td colSpan={POD_COLUMNS.length + 1} className="pods-empty-row">Loading pods...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row error">{error}</td>
+                    <td colSpan={POD_COLUMNS.length + 1} className="pods-empty-row error">{error}</td>
                   </tr>
                 ) : sortedItems.length === 0 ? (
                   <tr>
-                    <td colSpan={POD_COLUMNS.length} className="pods-empty-row">{emptyStateMessage}</td>
+                    <td colSpan={POD_COLUMNS.length + 1} className="pods-empty-row">{emptyStateMessage}</td>
                   </tr>
                 ) : (
                   pagedItems.map((item, index) => {
                     const podKey = getPodKey(item)
                     const isSelected = visibleSelectedPodKey === podKey
                     const isFocused = focusedRowIndex === index
+                    const isChecked = selectedKeys.includes(podKey)
                     const activatePodFromNameCell = (event: ReactMouseEvent<HTMLElement>) => {
                       const pin = event.detail >= 2
                       onPodActivate?.(item, { pin })
@@ -514,6 +621,15 @@ export default function PodsTable({
                     }
                     return (
                       <tr key={podKey} className={`${isSelected ? 'selected' : ''} ${isFocused ? 'keyboard-focused' : ''}`}>
+                        <td className="pods-cell pods-select-col">
+                          <input
+                            type="checkbox"
+                            className="pods-row-checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleRowSelection(podKey)}
+                            aria-label={`Select ${item.name}`}
+                          />
+                        </td>
                         <td
                           className="pods-name-cell pods-cell"
                           title={item.name}
@@ -622,6 +738,39 @@ export default function PodsTable({
 
       {showInlineDetails && selectedPod && detailsMaximized && (
         <div className="pods-detail-modal-overlay" onClick={() => setDetailsMaximized(false)} />
+      )}
+
+      {deleteConfirmOpen && (
+        <Modal title={`Delete ${selectedCount} Pod${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>Delete {selectedCount} selected pod{selectedCount === 1 ? '' : 's'}?</p>
+          {deleteError && (
+            <div className="pods-detail-alert error">{deleteError}</div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-danger" onClick={() => void handleDeleteSelected()} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleteResult && (
+        <Modal title="Bulk Delete Result" onClose={() => setDeleteResult(null)}>
+          <p>Deleted {deleteResult.deleted.length} pod{deleteResult.deleted.length === 1 ? '' : 's'}.</p>
+          {deleteResult.failed.length > 0 && (
+            <div className="pods-bulk-result">
+              {deleteResult.failed.map(item => (
+                <div key={getPodKey(item)} className="pods-bulk-result-item">
+                  <strong>{item.namespace}/{item.name}</strong>
+                  <span>{item.error}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   )

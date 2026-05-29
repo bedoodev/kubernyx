@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { GetBasePath, SetBasePath, SelectDirectory } from './shared/api'
+import { WindowReloadApp } from '../wailsjs/runtime/runtime'
 import { useSidebarResize } from './shared/hooks/useSidebarResize'
 import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterTabs'
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
@@ -23,9 +24,9 @@ import NodeDetailPanel, { type NodeDetailsTabId } from './features/nodes/compone
 import NetworkView from './features/network/NetworkView'
 import NodesView from './features/nodes/NodesView'
 import EventsView from './features/events/EventsView'
-import ClusterTerminalPanel from './features/terminal/ClusterTerminalPanel'
 import { useNetworkDetail } from './features/network/hooks/useNetworkDetail'
 import { useNodeDetail } from './features/nodes/hooks/useNodeDetail'
+import ClusterTerminalPanel from './features/terminal/ClusterTerminalPanel'
 import { usePodDetail } from './features/workloads/pods/hooks/usePodDetail'
 import { usePodLogs } from './features/workloads/pods/hooks/usePodLogs'
 import { useDeploymentDetail } from './features/workloads/deployments/hooks/useDeploymentDetail'
@@ -60,7 +61,6 @@ interface TerminalTabState {
   id: string
   clusterFilename: string
   title: string
-  customTitle: boolean
 }
 
 type DetailPanelTabId = PodDetailsTabId | DeploymentDetailsTabId | ConfigDetailsTabId | NetworkDetailsTabId | NodeDetailsTabId
@@ -108,10 +108,6 @@ function getPodRowKey(pod: PodResource): string {
   return `${pod.namespace}/${pod.name}`
 }
 
-function createTerminalTabId(clusterFilename: string): string {
-  return `terminal:${clusterFilename}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
-}
-
 function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
   if (tab.kind === 'deployment') {
     const kindLabel = workloadSingularLabel(tab.workloadTab ?? 'deployments')
@@ -157,6 +153,7 @@ function normalizeDetailPanelTab(kind: PodDetailTabState['kind'], tab?: DetailPa
   if (kind === 'node') {
     return (
       tab === 'overview'
+      || tab === 'shell'
       || tab === 'yaml'
     ) ? tab : 'overview'
   }
@@ -180,18 +177,21 @@ function getSplitMaxWidth(totalWidth: number): number {
   return Math.max(APP_DETAIL_MIN_WIDTH, totalWidth - APP_DETAIL_LEFT_MIN_WIDTH)
 }
 
+function createTerminalTabId(clusterFilename: string): string {
+  return `cluster-terminal:${clusterFilename}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+}
+
 export default function App() {
   const { shortcuts, updateShortcut, resetAll: resetShortcuts } = useShortcutSettings()
   const [view, setView] = useState<AppView>('loading')
   const [showSettings, setShowSettings] = useState(false)
-  const [terminalTabs, setTerminalTabs] = useState<TerminalTabState[]>([])
-  const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(null)
-  const [terminalCollapsed, setTerminalCollapsed] = useState(false)
-  const [terminalOpenAlert, setTerminalOpenAlert] = useState<string | null>(null)
   const sidebar = useSidebarResize({ default: 260, min: 220, max: 520 })
   const clusterTabs = useClusterTabs({ showSettings })
   const [podDetailTabs, setPodDetailTabs] = useState<PodDetailTabState[]>([])
+  const [terminalTabs, setTerminalTabs] = useState<TerminalTabState[]>([])
   const [activePodDetailTabId, setActivePodDetailTabId] = useState<string | null>(null)
+  const [activeTerminalTabId, setActiveTerminalTabId] = useState<string | null>(null)
+  const [terminalCollapsed, setTerminalCollapsed] = useState(false)
   const [detailPanelTabByPodTabId, setDetailPanelTabByPodTabId] = useState<Record<string, DetailPanelTabId>>({})
   const [detailPanelWidth, setDetailPanelWidth] = useState(560)
   const [detailPanelMaximized, setDetailPanelMaximized] = useState(false)
@@ -200,6 +200,7 @@ export default function App() {
   const [mainBodyWidth, setMainBodyWidth] = useState(0)
   const mainBodyRef = useRef<HTMLDivElement | null>(null)
   const sidebarRef = useRef<HTMLDivElement | null>(null)
+  const lastSelectedClusterFilenameRef = useRef<string | null>(null)
   const handleCollapseSnap = useCallback(() => {
     if (!detailPanelMinimized) {
       setDetailPanelWidthBeforeMinimize(detailPanelWidth)
@@ -216,19 +217,6 @@ export default function App() {
     () => (activePodDetailTabId ? (podDetailTabs.find(tab => tab.id === activePodDetailTabId) ?? null) : null),
     [activePodDetailTabId, podDetailTabs],
   )
-  const terminalPanelTabs = useMemo(
-    () => terminalTabs.flatMap(tab => {
-      const cluster = clusterTabs.clusters.find(item => item.filename === tab.clusterFilename)
-      return cluster ? [{ id: tab.id, cluster, title: tab.title }] : []
-    }),
-    [clusterTabs.clusters, terminalTabs],
-  )
-  const activeTerminalTab = useMemo(
-    () => (activeTerminalTabId ? (terminalPanelTabs.find(tab => tab.id === activeTerminalTabId) ?? null) : null),
-    [activeTerminalTabId, terminalPanelTabs],
-  )
-  const resolvedActiveTerminalTabId = activeTerminalTab?.id ?? terminalPanelTabs[0]?.id ?? null
-
   const activePodDetailPanelTab = activePodDetailTab
     ? (detailPanelTabByPodTabId[activePodDetailTab.id] ?? 'overview')
     : 'overview'
@@ -255,6 +243,27 @@ export default function App() {
   const activeNodeForDetail = activePodDetailTab?.kind === 'node'
     ? (activePodDetailTab.nodeResource ?? null)
     : null
+
+  const terminalPanelTabs = useMemo(() => {
+    return terminalTabs.flatMap(tab => {
+      const cluster = clusterTabs.clusters.find(item => item.filename === tab.clusterFilename)
+      if (!cluster) {
+        return []
+      }
+      return [{
+        id: tab.id,
+        cluster,
+        title: tab.title,
+      }]
+    })
+  }, [clusterTabs.clusters, terminalTabs])
+
+  const resolvedActiveTerminalTabId = useMemo(() => {
+    if (activeTerminalTabId && terminalPanelTabs.some(tab => tab.id === activeTerminalTabId)) {
+      return activeTerminalTabId
+    }
+    return terminalPanelTabs[0]?.id ?? null
+  }, [activeTerminalTabId, terminalPanelTabs])
 
   const { podDetail, podDetailLoading, podDetailError } = usePodDetail(
     activePodDetailTab?.clusterFilename ?? '',
@@ -688,6 +697,56 @@ export default function App() {
     }
   }, [detailPanelMinimized, detailPanelWidth, detailPanelWidthBeforeMinimize])
 
+  const handleOpenClusterTerminal = useCallback((cluster: ClusterInfo) => {
+    const terminalTab: TerminalTabState = {
+      id: createTerminalTabId(cluster.filename),
+      clusterFilename: cluster.filename,
+      title: cluster.name,
+    }
+    setShowSettings(false)
+    setTerminalCollapsed(false)
+    setTerminalTabs(current => [...current, terminalTab])
+    setActiveTerminalTabId(terminalTab.id)
+  }, [])
+
+  const findClusterByFilename = useCallback((filename: string | null | undefined) => {
+    if (!filename) {
+      return null
+    }
+    return clusterTabs.clusters.find(cluster => cluster.filename === filename) ?? null
+  }, [clusterTabs.clusters])
+
+  const handleCloseTerminalTab = useCallback((tabId: string) => {
+    setTerminalTabs(current => {
+      const index = current.findIndex(tab => tab.id === tabId)
+      if (index < 0) {
+        return current
+      }
+      const next = current.filter(tab => tab.id !== tabId)
+      setActiveTerminalTabId(currentActive => {
+        if (currentActive !== tabId) {
+          return currentActive
+        }
+        const fallback = next[index] ?? next[index - 1] ?? null
+        return fallback?.id ?? null
+      })
+      return next
+    })
+  }, [])
+
+  const handleCloseTerminalPanel = useCallback(() => {
+    setTerminalTabs([])
+    setActiveTerminalTabId(null)
+    setTerminalCollapsed(false)
+  }, [])
+
+  const handleCloseFocusedTerminalTabShortcut = useCallback(() => {
+    if (!resolvedActiveTerminalTabId) {
+      return
+    }
+    handleCloseTerminalTab(resolvedActiveTerminalTabId)
+  }, [handleCloseTerminalTab, resolvedActiveTerminalTabId])
+
   const handleEscapeNav = useCallback(() => {
     if (activePodDetailTabId) {
       handleClosePodDetailTab(activePodDetailTabId)
@@ -699,74 +758,54 @@ export default function App() {
     clusterList?.focus()
   }, [activePodDetailTabId, handleClosePodDetailTab])
 
-  const openTerminalForCluster = useCallback((cluster: ClusterInfo) => {
-    if (cluster.healthStatus === 'red') {
-      setTerminalOpenAlert(`Cannot open terminal: "${cluster.name}" cluster is unreachable.`)
-      return
-    }
-    const nextTabId = createTerminalTabId(cluster.filename)
-    setShowSettings(false)
-    setTerminalCollapsed(false)
-    setTerminalTabs(current => [...current, {
-      id: nextTabId,
-      clusterFilename: cluster.filename,
-      title: cluster.name,
-      customTitle: false,
-    }])
-    setActiveTerminalTabId(nextTabId)
-  }, [])
-
-  const closeTerminalTabById = useCallback((tabId: string) => {
-    setTerminalTabs(current => {
-      const index = current.findIndex(tab => tab.id === tabId)
-      if (index === -1) {
-        return current
-      }
-      const next = current.filter(tab => tab.id !== tabId)
-      setActiveTerminalTabId(previous => {
-        if (next.length === 0) {
-          return null
-        }
-        if (previous && previous !== tabId && next.some(tab => tab.id === previous)) {
-          return previous
-        }
-        const fallbackIndex = Math.max(0, Math.min(index, next.length - 1))
-        return next[fallbackIndex].id
-      })
-      if (next.length === 0) {
-        setTerminalCollapsed(false)
-      }
-      return next
-    })
-  }, [])
-
-  const handleCloseFocusedTerminalTabShortcut = useCallback(() => {
-    if (!resolvedActiveTerminalTabId) {
-      return
-    }
-    closeTerminalTabById(resolvedActiveTerminalTabId)
-  }, [closeTerminalTabById, resolvedActiveTerminalTabId])
-
   const isTerminalFocused = useCallback(() => {
-    const activeElement = document.activeElement as HTMLElement | null
+    const activeElement = document.activeElement
     if (!activeElement) {
       return false
     }
-    const terminalRoot = document.querySelector('.cluster-terminal-panel') as HTMLElement | null
-    if (!terminalRoot) {
-      return false
-    }
-    return terminalRoot.contains(activeElement)
+    return Boolean(document.querySelector('.cluster-terminal-panel')?.contains(activeElement))
   }, [])
 
   const handleOpenClusterTerminalShortcut = useCallback(() => {
-    const targetCluster = clusterTabs.activeTab?.cluster ?? null
-    if (!targetCluster) {
-      setTerminalOpenAlert('Select a cluster tab first to open terminal.')
+    const activeTerminalCluster = resolvedActiveTerminalTabId
+      ? (terminalPanelTabs.find(tab => tab.id === resolvedActiveTerminalTabId)?.cluster ?? null)
+      : null
+    if (activeTerminalCluster && isTerminalFocused()) {
+      handleOpenClusterTerminal(activeTerminalCluster)
       return
     }
-    openTerminalForCluster(targetCluster)
-  }, [clusterTabs.activeTab, openTerminalForCluster])
+
+    const activeElement = document.activeElement
+    const detailPanelFocused = activeElement
+      ? Boolean(document.querySelector('.app-pod-detail-pane')?.contains(activeElement))
+      : false
+    const detailTabCluster = findClusterByFilename(activePodDetailTab?.clusterFilename)
+    const activeCluster = clusterTabs.activeTab?.cluster ?? null
+    const lastSelectedCluster = findClusterByFilename(lastSelectedClusterFilenameRef.current)
+    const targetCluster = (detailPanelFocused ? detailTabCluster : null)
+      ?? activeCluster
+      ?? detailTabCluster
+      ?? lastSelectedCluster
+      ?? clusterTabs.clusters[0]
+      ?? null
+
+    if (targetCluster) {
+      handleOpenClusterTerminal(targetCluster)
+    }
+  }, [
+    activePodDetailTab?.clusterFilename,
+    clusterTabs.activeTab,
+    clusterTabs.clusters,
+    findClusterByFilename,
+    handleOpenClusterTerminal,
+    isTerminalFocused,
+    resolvedActiveTerminalTabId,
+    terminalPanelTabs,
+  ])
+
+  const handleRefreshApp = useCallback(() => {
+    WindowReloadApp()
+  }, [])
 
   useKeyboardShortcuts({
     enabled: view === 'main',
@@ -782,55 +821,9 @@ export default function App() {
     onToggleSidebar: sidebar.onToggle,
     onToggleDetailMinimize: handleToggleDetailMinimize,
     onOpenTerminal: handleOpenClusterTerminalShortcut,
+    onRefreshApp: handleRefreshApp,
     onEscapeNav: handleEscapeNav,
   })
-
-  useEffect(() => {
-    if (!terminalOpenAlert) {
-      return
-    }
-    const timeout = window.setTimeout(() => {
-      setTerminalOpenAlert(null)
-    }, 2600)
-    return () => window.clearTimeout(timeout)
-  }, [terminalOpenAlert])
-
-  useEffect(() => {
-    if (terminalPanelTabs.length === 0) {
-      if (activeTerminalTabId !== null) {
-        setActiveTerminalTabId(null)
-      }
-      if (terminalCollapsed) {
-        setTerminalCollapsed(false)
-      }
-      return
-    }
-    if (!activeTerminalTabId || !terminalPanelTabs.some(tab => tab.id === activeTerminalTabId)) {
-      setActiveTerminalTabId(terminalPanelTabs[0].id)
-    }
-  }, [activeTerminalTabId, terminalCollapsed, terminalPanelTabs])
-
-  useEffect(() => {
-    const clusterNameByFilename = new Map(clusterTabs.clusters.map(cluster => [cluster.filename, cluster.name]))
-    setTerminalTabs(current => {
-      let changed = false
-      const next: TerminalTabState[] = []
-      for (const tab of current) {
-        const clusterName = clusterNameByFilename.get(tab.clusterFilename)
-        if (!clusterName) {
-          changed = true
-          continue
-        }
-        if (!tab.customTitle && tab.title !== clusterName) {
-          changed = true
-          next.push({ ...tab, title: clusterName })
-          continue
-        }
-        next.push(tab)
-      }
-      return changed ? next : current
-    })
-  }, [clusterTabs.clusters])
 
   useEffect(() => {
     GetBasePath().then(path => {
@@ -854,6 +847,12 @@ export default function App() {
   }, [activePodDetailTabId, podDetailTabs])
 
   useEffect(() => {
+    if (clusterTabs.activeTab?.cluster.filename) {
+      lastSelectedClusterFilenameRef.current = clusterTabs.activeTab.cluster.filename
+    }
+  }, [clusterTabs.activeTab])
+
+  useEffect(() => {
     const clusterNamesByFilename = new Map(clusterTabs.clusters.map(cluster => [cluster.filename, cluster.name]))
     setPodDetailTabs(current => current.flatMap(tab => {
       const nextClusterName = clusterNamesByFilename.get(tab.clusterFilename)
@@ -866,6 +865,41 @@ export default function App() {
       return [{ ...tab, clusterName: nextClusterName }]
     }))
   }, [clusterTabs.clusters])
+
+  useEffect(() => {
+    const clusterNamesByFilename = new Map(clusterTabs.clusters.map(cluster => [cluster.filename, cluster.name]))
+    setTerminalTabs(current => {
+      let changed = false
+      const next: TerminalTabState[] = []
+      for (const tab of current) {
+        const clusterName = clusterNamesByFilename.get(tab.clusterFilename)
+        if (!clusterName) {
+          changed = true
+          continue
+        }
+        if (clusterName !== tab.title) {
+          changed = true
+          next.push({ ...tab, title: clusterName })
+          continue
+        }
+        next.push(tab)
+      }
+      return changed ? next : current
+    })
+  }, [clusterTabs.clusters])
+
+  useEffect(() => {
+    if (terminalPanelTabs.length === 0) {
+      if (activeTerminalTabId !== null) {
+        setActiveTerminalTabId(null)
+      }
+      return
+    }
+    if (!resolvedActiveTerminalTabId || resolvedActiveTerminalTabId === activeTerminalTabId) {
+      return
+    }
+    setActiveTerminalTabId(resolvedActiveTerminalTabId)
+  }, [activeTerminalTabId, resolvedActiveTerminalTabId, terminalPanelTabs.length])
 
   useEffect(() => {
     const validTabIds = new Set(podDetailTabs.map(tab => tab.id))
@@ -949,45 +983,9 @@ export default function App() {
 
   const handleSelectCluster: typeof clusterTabs.handleSelectCluster = (...args) => {
     setShowSettings(false)
+    lastSelectedClusterFilenameRef.current = args[0].filename
     clusterTabs.handleSelectCluster(...args)
   }
-
-  const handleOpenClusterTerminal = useCallback((cluster: ClusterInfo) => {
-    openTerminalForCluster(cluster)
-  }, [openTerminalForCluster])
-
-  const handleSelectTerminalTab = useCallback((tabId: string) => {
-    setActiveTerminalTabId(tabId)
-  }, [])
-
-  const handleCloseClusterTerminalTab = useCallback((tabId: string) => {
-    closeTerminalTabById(tabId)
-  }, [closeTerminalTabById])
-
-  const handleRenameClusterTerminalTab = useCallback((tabId: string, title: string) => {
-    const nextTitle = title.trim()
-    if (!nextTitle) {
-      return
-    }
-    setTerminalTabs(current => current.map(tab => (
-      tab.id === tabId
-        ? { ...tab, title: nextTitle, customTitle: true }
-        : tab
-    )))
-  }, [])
-
-  const handleCloseClusterTerminalPanel = useCallback(() => {
-    setTerminalTabs([])
-    setActiveTerminalTabId(null)
-    setTerminalCollapsed(false)
-  }, [])
-
-  const handleToggleClusterTerminalCollapsed = useCallback(() => {
-    if (terminalPanelTabs.length === 0) {
-      return
-    }
-    setTerminalCollapsed(current => !current)
-  }, [terminalPanelTabs.length])
 
   if (view === 'loading') {
     return <div className="app-loading"><div className="spinner" /></div>
@@ -1086,8 +1084,9 @@ export default function App() {
             onDelete={clusterTabs.handleDeleteCluster}
             onReadConfig={clusterTabs.handleGetClusterConfig}
             onUpdateConfig={clusterTabs.handleUpdateClusterConfig}
-            onSettingsClick={() => setShowSettings(true)}
             onOpenTerminal={handleOpenClusterTerminal}
+            onSettingsClick={() => setShowSettings(true)}
+            onRefreshApp={handleRefreshApp}
           />
           <div
             className={`sidebar-resizer ${sidebar.sidebarResizing ? 'active' : ''}`}
@@ -1369,20 +1368,13 @@ export default function App() {
             activeTabId={resolvedActiveTerminalTabId}
             collapsed={terminalCollapsed}
             onCreateTab={handleOpenClusterTerminal}
-            onSelectTab={handleSelectTerminalTab}
-            onCloseTab={handleCloseClusterTerminalTab}
-            onRenameTab={handleRenameClusterTerminalTab}
-            onToggleCollapse={handleToggleClusterTerminalCollapsed}
-            onClosePanel={handleCloseClusterTerminalPanel}
+            onSelectTab={setActiveTerminalTabId}
+            onCloseTab={handleCloseTerminalTab}
+            onClosePanel={handleCloseTerminalPanel}
+            onToggleCollapse={() => setTerminalCollapsed(current => !current)}
           />
         )}
       </main>
-
-      {terminalOpenAlert && (
-        <div className="app-shortcut-alert error" role="alert" aria-live="assertive">
-          {terminalOpenAlert}
-        </div>
-      )}
 
       {showSettings && (
         <Modal title="Settings" onClose={() => setShowSettings(false)}>

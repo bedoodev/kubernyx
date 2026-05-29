@@ -14,7 +14,18 @@ import type {
   DeploymentLogLine,
   ConfigResource,
   ConfigDetail,
+  BatchDeleteResult,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalStatusEvent,
 } from '../types'
+
+function unwrapEventRecord(data: unknown): Record<string, unknown> {
+  if (Array.isArray(data) && data.length === 1) {
+    return ((data[0] ?? {}) as Record<string, unknown>)
+  }
+  return ((data ?? {}) as Record<string, unknown>)
+}
 
 export function toClusterHealthStatus(value: unknown): ClusterHealthStatus {
   if (value === 'green' || value === 'yellow' || value === 'red') {
@@ -85,7 +96,7 @@ export function normalizeWorkloadStatuses(record: Record<string, unknown>): Work
 }
 
 export function toStreamEvent(data: unknown): PodsStreamEvent {
-  const record = (data ?? {}) as Record<string, unknown>
+  const record = unwrapEventRecord(data)
   return {
     streamId: String(record.streamId ?? ''),
     clusterFilename: String(record.clusterFilename ?? ''),
@@ -97,7 +108,7 @@ export function toStreamEvent(data: unknown): PodsStreamEvent {
 }
 
 export function toPodLogsStreamEvent(data: unknown): PodLogsStreamEvent {
-  const record = (data ?? {}) as Record<string, unknown>
+  const record = unwrapEventRecord(data)
   return {
     streamId: String(record.streamId ?? ''),
     clusterFilename: String(record.clusterFilename ?? ''),
@@ -106,6 +117,56 @@ export function toPodLogsStreamEvent(data: unknown): PodLogsStreamEvent {
     items: toPodLogLines(record.items),
     updatedAtUnix: Number(record.updatedAtUnix ?? 0),
     error: record.error ? String(record.error) : undefined,
+  }
+}
+
+export function toTerminalDataEvent(data: unknown): TerminalDataEvent {
+  const record = unwrapEventRecord(data)
+  return {
+    sessionId: String(record.sessionId ?? ''),
+    data: String(record.data ?? ''),
+  }
+}
+
+export function toTerminalExitEvent(data: unknown): TerminalExitEvent {
+  const record = unwrapEventRecord(data)
+  return {
+    sessionId: String(record.sessionId ?? ''),
+    exitCode: Number(record.exitCode ?? 0),
+    error: record.error ? String(record.error) : undefined,
+  }
+}
+
+export function toTerminalStatusEvent(data: unknown): TerminalStatusEvent {
+  const record = unwrapEventRecord(data)
+  return {
+    sessionId: String(record.sessionId ?? ''),
+    state: String(record.state ?? 'connecting'),
+    message: record.message ? String(record.message) : undefined,
+  }
+}
+
+export function toBatchDeleteResult(data: unknown): BatchDeleteResult {
+  const record = (data ?? {}) as Record<string, unknown>
+  const toRef = (value: unknown) => {
+    const item = (value ?? {}) as Record<string, unknown>
+    return {
+      namespace: String(item.namespace ?? ''),
+      name: String(item.name ?? ''),
+    }
+  }
+  return {
+    deleted: Array.isArray(record.deleted) ? record.deleted.map(toRef) : [],
+    failed: Array.isArray(record.failed)
+      ? record.failed.map(item => {
+        const failure = (item ?? {}) as Record<string, unknown>
+        return {
+          namespace: String(failure.namespace ?? ''),
+          name: String(failure.name ?? ''),
+          error: String(failure.error ?? 'Unknown error'),
+        }
+      })
+      : [],
   }
 }
 

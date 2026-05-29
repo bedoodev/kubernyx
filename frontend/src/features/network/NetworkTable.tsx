@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import type { DeploymentResource, NetworkTabId } from '../../shared/types'
+import type { BatchDeleteResult, DeploymentResource, NetworkTabId } from '../../shared/types'
+import { DeleteResourcesBatch } from '../../shared/api'
+import Modal from '../../shared/components/Modal'
 import { formatAgeFromUnix } from '../../shared/utils/formatting'
-import { networkPluralLabel } from './networkKinds'
+import { toBatchDeleteResult } from '../../shared/utils/normalization'
+import { networkPluralLabel, networkSingularLabel, toNetworkAPIKind } from './networkKinds'
 import { useNetworkResources } from './hooks/useNetworkResources'
 import '../workloads/pods/PodsTable.css'
 
@@ -22,6 +25,7 @@ type Column = {
 }
 
 const PAGE_SIZE_OPTIONS = [20, 50] as const
+const SELECT_COLUMN_WIDTH = 52
 
 const SERVICE_COLUMNS: Column[] = [
   { key: 'name', label: 'Name', width: '30%' },
@@ -39,7 +43,7 @@ const INGRESS_COLUMNS: Column[] = [
   { key: 'age', label: 'Age', width: '14%' },
 ]
 
-function getResourceKey(item: DeploymentResource): string {
+function getResourceKey(item: Pick<DeploymentResource, 'namespace' | 'name'>): string {
   return `${item.namespace}/${item.name}`
 }
 
@@ -61,6 +65,11 @@ export default function NetworkTable({
   const [sortKey, setSortKey] = useState<ColumnKey>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000))
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteResult, setDeleteResult] = useState<BatchDeleteResult | null>(null)
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -106,6 +115,11 @@ export default function NetworkTable({
 
   useEffect(() => { setPage(1) }, [search, pageSize, networkTab])
   useEffect(() => { setPage(current => Math.min(current, totalPages)) }, [totalPages])
+  useEffect(() => { setSelectedKeys([]) }, [clusterFilename, networkTab, search, selectedNamespaces])
+  useEffect(() => {
+    const validKeys = new Set(items.map(getResourceKey))
+    setSelectedKeys(current => current.filter(key => validKeys.has(key)))
+  }, [items])
 
   const handleSort = (key: ColumnKey) => {
     if (sortKey === key) {
@@ -120,14 +134,88 @@ export default function NetworkTable({
   const emptyStateMessage = selectedNamespaces.length === 0
     ? 'Select at least one namespace.'
     : `No ${pluralLabel.toLowerCase()} found`
+  const selectedCount = selectedKeys.length
+  const visibleKeys = pagedItems.map(getResourceKey)
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every(key => selectedKeys.includes(key))
+  const selectedResources = sortedItems.filter(item => selectedKeys.includes(getResourceKey(item)))
+  const resourceLabel = networkSingularLabel(networkTab)
+
+  const toggleRowSelection = (key: string) => {
+    setSelectedKeys(current => (
+      current.includes(key)
+        ? current.filter(item => item !== key)
+        : [...current, key]
+    ))
+  }
+
+  const toggleVisibleSelection = () => {
+    setSelectedKeys(current => {
+      if (allVisibleSelected) {
+        const visibleSet = new Set(visibleKeys)
+        return current.filter(key => !visibleSet.has(key))
+      }
+      const next = new Set(current)
+      for (const key of visibleKeys) {
+        next.add(key)
+      }
+      return Array.from(next)
+    })
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedResources.length === 0 || deletePending) {
+      return
+    }
+
+    setDeletePending(true)
+    setDeleteError(null)
+    try {
+      const response = await DeleteResourcesBatch(
+        clusterFilename,
+        toNetworkAPIKind(networkTab),
+        selectedResources.map(item => ({
+          namespace: item.namespace,
+          name: item.name,
+        })),
+      )
+      const result = toBatchDeleteResult(response)
+      setDeleteResult(result)
+      setSelectedKeys(current => {
+        const failedKeys = new Set(result.failed.map(item => getResourceKey(item)))
+        return current.filter(key => failedKeys.has(key))
+      })
+      setDeleteConfirmOpen(false)
+    } catch (errorValue: unknown) {
+      setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    } finally {
+      setDeletePending(false)
+    }
+  }
 
   return (
     <div className="pods-table-root">
       <div className="pods-content">
         <div className="pods-table-pane">
           <div className="pods-toolbar">
-            <div className="pods-resource-count">
-              <strong>{rowCountLabel}</strong>
+            <div className="pods-toolbar-meta">
+              <div className="pods-resource-count" aria-label={`${rowCountLabel} visible ${pluralLabel.toLowerCase()}`}>
+                <strong>{rowCountLabel}</strong>
+                <span>visible</span>
+              </div>
+              {selectedCount > 0 && (
+                <div className="pods-bulk-actions">
+                  <span className="pods-bulk-count">
+                    <strong>{selectedCount}</strong>
+                    <span>selected</span>
+                  </span>
+                  <button type="button" className="pods-bulk-btn" onClick={toggleVisibleSelection}>
+                    {allVisibleSelected ? 'Clear visible' : 'Select visible'}
+                  </button>
+                  <button type="button" className="pods-bulk-btn danger" onClick={() => setDeleteConfirmOpen(true)}>
+                    Delete selected
+                  </button>
+                </div>
+              )}
             </div>
             <input
               className="pods-search"
@@ -138,14 +226,26 @@ export default function NetworkTable({
           </div>
 
           <div className="pods-table-wrap">
-            <table className="pods-table" style={{ width: '100%', minWidth: '760px' }}>
+            <table className="pods-table" style={{ width: '100%', minWidth: `${SELECT_COLUMN_WIDTH + 760}px` }}>
               <colgroup>
+                <col style={{ width: `${SELECT_COLUMN_WIDTH}px` }} />
                 {columns.map(column => (
                   <col key={column.key} style={{ width: column.width }} />
                 ))}
               </colgroup>
               <thead>
                 <tr>
+                  <th className="pods-select-col">
+                    <div className="pods-th-content">
+                      <input
+                        type="checkbox"
+                        className="pods-row-checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleVisibleSelection}
+                        aria-label="Select visible rows"
+                      />
+                    </div>
+                  </th>
                   {columns.map(column => (
                     <th key={column.key}>
                       <div className="pods-th-content">
@@ -174,21 +274,31 @@ export default function NetworkTable({
               </thead>
               <tbody>
                 {error ? (
-                  <tr><td colSpan={columns.length} className="pods-empty-row error">{error}</td></tr>
+                  <tr><td colSpan={columns.length + 1} className="pods-empty-row error">{error}</td></tr>
                 ) : loading ? (
-                  <tr><td colSpan={columns.length} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td></tr>
+                  <tr><td colSpan={columns.length + 1} className="pods-empty-row">Loading {pluralLabel.toLowerCase()}...</td></tr>
                 ) : sortedItems.length === 0 ? (
-                  <tr><td colSpan={columns.length} className="pods-empty-row">{emptyStateMessage}</td></tr>
+                  <tr><td colSpan={columns.length + 1} className="pods-empty-row">{emptyStateMessage}</td></tr>
                 ) : (
                   pagedItems.map(item => {
                     const key = getResourceKey(item)
                     const isSelected = externalSelectedKey === key
+                    const isChecked = selectedKeys.includes(key)
                     const activateFromNameCell = (event: ReactMouseEvent<HTMLElement>) => {
                       const pin = event.detail >= 2
                       onResourceActivate?.(item, { pin })
                     }
                     return (
                       <tr key={key} className={isSelected ? 'selected' : ''}>
+                        <td className="pods-cell pods-select-col">
+                          <input
+                            type="checkbox"
+                            className="pods-row-checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleRowSelection(key)}
+                            aria-label={`Select ${item.name}`}
+                          />
+                        </td>
                         <td className="pods-name-cell pods-cell" title={item.name} onClick={activateFromNameCell}>
                           <button
                             type="button"
@@ -229,6 +339,39 @@ export default function NetworkTable({
           </div>
         </div>
       </div>
+
+      {deleteConfirmOpen && (
+        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+          <p>Delete {selectedCount} selected {resourceLabel.toLowerCase()}{selectedCount === 1 ? '' : 's'}?</p>
+          {deleteError && (
+            <div className="pods-detail-alert error">{deleteError}</div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-danger" onClick={() => void handleDeleteSelected()} disabled={deletePending}>
+              {deletePending ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleteResult && (
+        <Modal title="Bulk Delete Result" onClose={() => setDeleteResult(null)}>
+          <p>Deleted {deleteResult.deleted.length} {resourceLabel.toLowerCase()}{deleteResult.deleted.length === 1 ? '' : 's'}.</p>
+          {deleteResult.failed.length > 0 && (
+            <div className="pods-bulk-result">
+              {deleteResult.failed.map(item => (
+                <div key={getResourceKey(item)} className="pods-bulk-result-item">
+                  <strong>{item.namespace}/{item.name}</strong>
+                  <span>{item.error}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   )
 }

@@ -16,6 +16,7 @@ interface UseKeyboardShortcutsOptions {
   onToggleSidebar: () => void
   onToggleDetailMinimize: () => void
   onOpenTerminal: () => void
+  onRefreshApp: () => void
   onEscapeNav: () => void
 }
 
@@ -33,6 +34,7 @@ export function useKeyboardShortcuts({
   onToggleSidebar,
   onToggleDetailMinimize,
   onOpenTerminal,
+  onRefreshApp,
   onEscapeNav,
 }: UseKeyboardShortcutsOptions): void {
   useEffect(() => {
@@ -59,6 +61,16 @@ export function useKeyboardShortcuts({
 
         event.preventDefault()
         onEscapeNav()
+        return
+      }
+
+      const refreshOrControlOnly = isMacPlatform()
+        ? (event.metaKey && !event.ctrlKey)
+        : (event.ctrlKey && !event.metaKey)
+
+      if (refreshOrControlOnly && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'r') {
+        event.preventDefault()
+        onRefreshApp()
         return
       }
 
@@ -89,6 +101,12 @@ export function useKeyboardShortcuts({
         return
       }
 
+      if (key === shortcuts.openTerminal.key) {
+        event.preventDefault()
+        onOpenTerminal()
+        return
+      }
+
       if (key === shortcuts.toggleSidebar.key) {
         event.preventDefault()
         onToggleSidebar()
@@ -99,11 +117,6 @@ export function useKeyboardShortcuts({
         event.preventDefault()
         onToggleDetailMinimize()
         return
-      }
-
-      if (key === shortcuts.openTerminal.key) {
-        event.preventDefault()
-        onOpenTerminal()
       }
     }
 
@@ -123,6 +136,7 @@ export function useKeyboardShortcuts({
     onToggleSidebar,
     onToggleDetailMinimize,
     onOpenTerminal,
+    onRefreshApp,
     onEscapeNav,
   ])
 }

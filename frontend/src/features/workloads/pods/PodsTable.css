@@ -57,43 +57,60 @@
 /* ─── Toolbar ─── */
 
 .pods-toolbar {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) minmax(98px, 132px);
-  grid-template-areas: 'resources search status';
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   flex-shrink: 0;
 }
 
+.pods-toolbar-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
 .pods-table-root.with-details .pods-toolbar {
-  grid-template-columns: minmax(0, 1fr) 180px;
-  grid-template-areas:
-    'search search'
-    'resources status';
+  align-items: stretch;
 }
 
 .pods-resource-count {
-  grid-area: resources;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  padding: 8px 8px;
-  transition: border-color 0.15s ease;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(130, 151, 206, 0.16);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(24, 33, 58, 0.96), rgba(18, 26, 48, 0.94));
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  flex: 0 0 auto;
 }
 
 .pods-resource-count:hover {
-  border-color: var(--border);
+  border-color: rgba(145, 166, 226, 0.3);
 }
 
 .pods-resource-count strong {
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
   font-weight: 700;
   font-family: var(--font-sans);
-  letter-spacing: -0.35px;
+  letter-spacing: -0.3px;
+}
+
+.pods-resource-count span {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .pods-search,
@@ -116,10 +133,10 @@
 }
 
 .pods-search {
-  grid-area: search;
   padding: 0 14px;
   min-height: 40px;
   min-width: 0;
+  flex: 1 1 280px;
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.2px;
@@ -134,7 +151,7 @@
 
 .pods-status-select {
   position: relative;
-  grid-area: status;
+  flex: 0 0 132px;
   min-width: 0;
   z-index: 6;
 }
@@ -156,6 +173,73 @@
 .pods-status-trigger.open {
   border-color: rgba(108, 140, 255, 0.55);
   box-shadow: 0 0 0 1px rgba(108, 140, 255, 0.15), inset 0 0 0 1px rgba(108, 140, 255, 0.1);
+}
+
+.pods-bulk-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px;
+  border: 1px solid rgba(130, 151, 206, 0.16);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(26, 35, 61, 0.94), rgba(17, 24, 44, 0.94));
+}
+
+.pods-bulk-btn {
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  min-height: 32px;
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.pods-bulk-btn:hover {
+  color: var(--text-primary);
+  background: rgba(124, 151, 221, 0.08);
+  border-color: rgba(124, 151, 221, 0.16);
+}
+
+.pods-bulk-btn.danger {
+  color: #ffb4b4;
+  background: rgba(140, 41, 49, 0.08);
+  border-color: rgba(255, 122, 122, 0.18);
+}
+
+.pods-bulk-btn.danger:hover {
+  background: rgba(140, 41, 49, 0.14);
+  border-color: rgba(255, 122, 122, 0.28);
+}
+
+.pods-bulk-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(108, 140, 255, 0.1);
+  color: #dbe4ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pods-bulk-count strong {
+  font-size: 13px;
+  line-height: 1;
+  color: #f2f6ff;
+}
+
+.pods-bulk-count span {
+  line-height: 1;
+  color: rgba(219, 228, 255, 0.72);
 }
 
 .pods-status-trigger-value {
@@ -248,6 +332,15 @@
   border-collapse: collapse;
 }
 
+.pods-select-col {
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  text-align: center !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
 /* ─── Table Header ─── */
 
 .pods-table thead th {
@@ -303,6 +396,15 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
+.pods-row-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  display: inline-block;
+  vertical-align: middle;
+}
+
 .pods-table-wrap:focus-visible {
   outline: none;
 }
@@ -352,20 +454,27 @@
 /* ─── Column Header Content ─── */
 
 .pods-th-content {
-  position: relative;
+  position: static;
   display: flex;
   align-items: center;
   min-height: 20px;
-  padding-right: 18px;
-  overflow: visible;
+  min-width: 0;
+  padding-right: 14px;
+}
+
+.pods-select-col .pods-th-content {
+  justify-content: center;
+  padding-right: 0;
 }
 
 .pods-th-label {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
 }
 
 /* ─── Sort Button ─── */
@@ -376,10 +485,12 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   color: inherit;
   padding: 0;
   font: inherit;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .pods-sort-icon {
@@ -402,26 +513,27 @@
 
 .pods-col-resizer {
   position: absolute;
-  right: -9px;
-  top: -12px;
-  width: 14px;
-  height: calc(100% + 24px);
+  right: -1px;
+  top: 0;
+  width: 12px;
+  height: 100%;
   border: 0;
   background: transparent;
   padding: 0;
   cursor: col-resize;
+  z-index: 3;
 }
 
 .pods-col-resizer::before {
   content: '';
   position: absolute;
-  left: 6px;
-  top: 8px;
-  bottom: 8px;
+  left: 5px;
+  top: 9px;
+  bottom: 9px;
   width: 2px;
   border-radius: 999px;
   background: var(--accent-dim);
-  opacity: 0.5;
+  opacity: 0.35;
   transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -596,6 +708,24 @@
 
 .pods-empty-row.error {
   color: var(--red);
+}
+
+.pods-bulk-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.pods-bulk-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 122, 122, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 122, 122, 0.06);
+  color: var(--text-secondary);
 }
 
 /* ─── Pagination ─── */
@@ -2641,13 +2771,13 @@
   flex: 1;
   min-height: 320px;
   max-height: none;
-  overflow: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   padding: 12px 16px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.55;
-  cursor: text;
+}
+
+.pods-shell-terminal-session {
+  width: 100%;
+  height: 100%;
 }
 
 .pods-shell-welcome {

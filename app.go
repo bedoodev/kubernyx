@@ -15,6 +15,7 @@ import (
 	"kubernyx-app/internal/cluster"
 	"kubernyx-app/internal/config"
 	"kubernyx-app/internal/kube"
+	"kubernyx-app/internal/terminal"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -28,6 +29,10 @@ type App struct {
 	podStreamSeq        uint64
 	podLogsStreamCancel context.CancelFunc
 	podLogsStreamSeq    uint64
+	terminalManager     *terminal.Manager
+	terminalStartMu     sync.Mutex
+	terminalStarts      map[string]context.CancelFunc
+	nodeDebugPods       map[string]struct{}
 }
 
 func NewApp() *App {
@@ -36,6 +41,19 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.terminalStarts = make(map[string]context.CancelFunc)
+	a.nodeDebugPods = make(map[string]struct{})
+	a.terminalManager = terminal.NewManager(terminal.EventHandlers{
+		OnData: func(event terminal.DataEvent) {
+			runtime.EventsEmit(a.ctx, "terminal-data", event)
+		},
+		OnExit: func(event terminal.ExitEvent) {
+			runtime.EventsEmit(a.ctx, "terminal-exit", event)
+		},
+		OnStatus: func(event terminal.StatusEvent) {
+			runtime.EventsEmit(a.ctx, "terminal-status", event)
+		},
+	})
 	cfg, err := config.Load()
 	if err != nil {
 		cfg = &config.AppConfig{}
@@ -46,6 +64,11 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(_ context.Context) {
 	a.StopPodsStream()
 	a.StopPodLogsStream()
+	if a.terminalManager != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		a.terminalManager.CloseAll(closeCtx)
+		cancel()
+	}
 }
 
 func (a *App) newTempClient(filename string) (*kube.Client, error) {
@@ -58,6 +81,71 @@ func (a *App) newTempClient(filename string) (*kube.Client, error) {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
 	return client, nil
+}
+
+func (a *App) registerPendingTerminalStart(sessionID string, cancel context.CancelFunc) {
+	a.terminalStartMu.Lock()
+	defer a.terminalStartMu.Unlock()
+	a.terminalStarts[sessionID] = cancel
+}
+
+func (a *App) unregisterPendingTerminalStart(sessionID string) {
+	a.terminalStartMu.Lock()
+	defer a.terminalStartMu.Unlock()
+	delete(a.terminalStarts, sessionID)
+}
+
+func (a *App) cancelPendingTerminalStart(sessionID string) bool {
+	a.terminalStartMu.Lock()
+	cancel, ok := a.terminalStarts[sessionID]
+	if ok {
+		delete(a.terminalStarts, sessionID)
+	}
+	a.terminalStartMu.Unlock()
+	if ok && cancel != nil {
+		cancel()
+	}
+	return ok
+}
+
+func (a *App) emitTerminalStatus(sessionID string, state string, message string) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, "terminal-status", terminal.StatusEvent{
+		SessionID: sessionID,
+		State:     state,
+		Message:   message,
+	})
+}
+
+func (a *App) activeNodeDebugPodSnapshot() map[string]struct{} {
+	a.terminalStartMu.Lock()
+	defer a.terminalStartMu.Unlock()
+
+	snapshot := make(map[string]struct{}, len(a.nodeDebugPods))
+	for podName := range a.nodeDebugPods {
+		snapshot[podName] = struct{}{}
+	}
+	return snapshot
+}
+
+func (a *App) registerNodeDebugPod(podName string) {
+	if podName == "" {
+		return
+	}
+	a.terminalStartMu.Lock()
+	defer a.terminalStartMu.Unlock()
+	a.nodeDebugPods[podName] = struct{}{}
+}
+
+func (a *App) unregisterNodeDebugPod(podName string) {
+	if podName == "" {
+		return
+	}
+	a.terminalStartMu.Lock()
+	defer a.terminalStartMu.Unlock()
+	delete(a.nodeDebugPods, podName)
 }
 
 // GetBasePath returns the configured base directory path.
@@ -294,6 +382,15 @@ func (a *App) DeleteWorkloadResource(filename string, kind string, namespace str
 	return client.DeleteWorkload(a.ctx, kind, namespace, name)
 }
 
+// DeleteResourcesBatch deletes multiple resources of the same kind in best-effort mode.
+func (a *App) DeleteResourcesBatch(filename string, kind string, items []kube.ResourceRef) (*kube.BatchDeleteResult, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.DeleteResourcesBatch(a.ctx, kind, items)
+}
+
 // GetNodeResources returns node resources for the given cluster.
 func (a *App) GetNodeResources(filename string) ([]kube.NodeResource, error) {
 	client, err := a.newTempClient(filename)
@@ -364,6 +461,140 @@ func (a *App) ExecPodCommand(filename string, namespace string, podName string, 
 		return nil, err
 	}
 	return client.ExecPodCommand(a.ctx, namespace, podName, container, command)
+}
+
+// StartTerminalSession starts a persistent terminal session for a cluster, pod, or node shell.
+func (a *App) StartTerminalSession(sessionID string, target terminal.Target) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return fmt.Errorf("session id is required")
+	}
+
+	startCtx, cancel := context.WithCancel(context.Background())
+	a.registerPendingTerminalStart(sessionID, cancel)
+
+	go a.startTerminalSession(startCtx, sessionID, target)
+
+	return nil
+}
+
+// WriteTerminalInput writes raw input bytes to a terminal session.
+func (a *App) WriteTerminalInput(sessionID string, data string) error {
+	return a.terminalManager.Write(sessionID, data)
+}
+
+// ResizeTerminalSession resizes the terminal PTY.
+func (a *App) ResizeTerminalSession(sessionID string, cols int, rows int) error {
+	return a.terminalManager.Resize(sessionID, cols, rows)
+}
+
+// CloseTerminalSession closes a terminal session and runs best-effort cleanup.
+func (a *App) CloseTerminalSession(sessionID string) error {
+	if a.cancelPendingTerminalStart(sessionID) {
+		a.emitTerminalStatus(sessionID, "cleaning-up", "")
+		a.emitTerminalStatus(sessionID, "closed", "")
+		return nil
+	}
+	return a.terminalManager.Close(sessionID)
+}
+
+func (a *App) startTerminalSession(startCtx context.Context, sessionID string, target terminal.Target) {
+	defer a.unregisterPendingTerminalStart(sessionID)
+
+	kubeconfigPath, err := cluster.GetKubeconfigPath(a.cfg.BasePath, target.Filename)
+	if err != nil {
+		a.emitTerminalStatus(sessionID, "failed", err.Error())
+		return
+	}
+
+	debugPodName := ""
+	cleanup := func(context.Context) error { return nil }
+
+	switch target.Kind {
+	case terminal.TargetKindCluster:
+		a.emitTerminalStatus(sessionID, "connecting", "")
+	case terminal.TargetKindPod:
+		a.emitTerminalStatus(sessionID, "connecting", "")
+	case terminal.TargetKindNode:
+		if strings.TrimSpace(target.NodeName) == "" {
+			a.emitTerminalStatus(sessionID, "failed", "node name is required")
+			return
+		}
+		a.emitTerminalStatus(sessionID, "creating-debug-pod", fmt.Sprintf("Preparing node shell on %s", target.NodeName))
+
+		client, clientErr := a.newTempClient(target.Filename)
+		if clientErr != nil {
+			a.emitTerminalStatus(sessionID, "failed", clientErr.Error())
+			return
+		}
+
+		if cleanupErr := client.CleanupManagedNodeDebugPods(startCtx, target.NodeName, a.activeNodeDebugPodSnapshot()); cleanupErr != nil {
+			a.emitTerminalStatus(sessionID, "failed", cleanupErr.Error())
+			return
+		}
+
+		debugPodName, err = client.CreateNodeDebugPod(startCtx, target.NodeName)
+		if err != nil {
+			a.emitTerminalStatus(sessionID, "failed", err.Error())
+			return
+		}
+		a.registerNodeDebugPod(debugPodName)
+
+		cleanup = func(ctx context.Context) error {
+			a.unregisterNodeDebugPod(debugPodName)
+			return client.DeleteDebugPod(ctx, debugPodName)
+		}
+
+		if err = client.WaitForDebugPodReady(startCtx, debugPodName, 90*time.Second); err != nil {
+			_ = cleanup(context.Background())
+			a.emitTerminalStatus(sessionID, "failed", err.Error())
+			return
+		}
+
+		a.emitTerminalStatus(sessionID, "connecting", fmt.Sprintf("Connecting to %s", target.NodeName))
+	default:
+		a.emitTerminalStatus(sessionID, "failed", fmt.Sprintf("unsupported terminal target %q", target.Kind))
+		return
+	}
+
+	select {
+	case <-startCtx.Done():
+		if debugPodName != "" {
+			_ = cleanup(context.Background())
+		}
+		a.emitTerminalStatus(sessionID, "closed", "")
+		return
+	default:
+	}
+
+	commandSpec, err := terminal.BuildCommandSpec(target, kubeconfigPath, debugPodName)
+	if err != nil {
+		if debugPodName != "" {
+			_ = cleanup(context.Background())
+		}
+		a.emitTerminalStatus(sessionID, "failed", err.Error())
+		return
+	}
+
+	if target.Kind != terminal.TargetKindNode {
+		cleanup = nil
+	}
+
+	if err = a.terminalManager.Start(terminal.SessionConfig{
+		SessionID: sessionID,
+		Command:   commandSpec.Command,
+		Args:      commandSpec.Args,
+		Env:       commandSpec.Env,
+		Dir:       commandSpec.Dir,
+		Cols:      120,
+		Rows:      32,
+		Cleanup:   cleanup,
+	}); err != nil {
+		if debugPodName != "" {
+			_ = cleanup(context.Background())
+		}
+		a.emitTerminalStatus(sessionID, "failed", err.Error())
+	}
 }
 
 func (a *App) runKubectlCommand(command string, args []string) (*kube.PodExecResult, error) {

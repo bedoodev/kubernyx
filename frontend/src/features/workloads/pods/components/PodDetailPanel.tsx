@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PodResource, PodDetail, PodDetailContainer, PodLogLine } from '../../../../shared/types'
-import { DeletePodResource, ExecPodCommand, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
+import { DeletePodResource, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
 import { getAgeLabel, parsePhase, toPercent } from '../../../../shared/utils/formatting'
-import { toPodExecResult, toPodLogLines } from '../../../../shared/utils/normalization'
+import { toPodLogLines } from '../../../../shared/utils/normalization'
 import Modal from '../../../../shared/components/Modal'
 import YamlEditor from '../../../../shared/components/YamlEditor'
+import TerminalSessionView from '../../../../features/terminal/TerminalSessionView'
 import {
   valueToneClass,
   formatCommandDisplay,
@@ -21,43 +22,6 @@ type MetadataSectionKey = 'labels' | 'annotations'
 type InitSectionKey = 'env' | 'mounts'
 type ContainerSectionKey = 'env' | 'ports' | 'mounts' | 'args'
 type LogLevelFilter = 'all' | 'debug' | 'info' | 'warning' | 'error'
-
-interface ShellEntry {
-  id: number
-  container: string
-  command: string
-  stdout: string
-  stderr: string
-  exitCode: number
-}
-
-interface ShellSession {
-  entries: ShellEntry[]
-  cwd: string
-  history: string[]
-  historyIndex: number
-  draft: string
-  command: string
-  running: boolean
-  tabCompleting: boolean
-  error: string | null
-  unavailable: boolean
-  user: string
-}
-
-const EMPTY_SHELL_SESSION: ShellSession = {
-  entries: [],
-  cwd: '/',
-  history: [],
-  historyIndex: -1,
-  draft: '',
-  command: '',
-  running: false,
-  tabCompleting: false,
-  error: null,
-  unavailable: false,
-  user: '',
-}
 
 const POD_DETAIL_TABS: Array<{ id: PodDetailsTabId; label: string }> = [
   { id: 'overview', label: 'Overview' },
@@ -130,14 +94,6 @@ function formatMemoryValue(bytes: number): string {
     return `${(bytes / kib).toFixed(1)} KiB`
   }
   return `${Math.round(bytes)} B`
-}
-
-function isTerminalUnavailableError(message: string): boolean {
-  const value = message.toLowerCase()
-  return (
-    value.includes('unable to start container process')
-    || value.includes('executable file not found')
-  )
 }
 
 interface Props {
@@ -217,32 +173,11 @@ export default function PodDetailPanel({
   const [initLogsErrorByKey, setInitLogsErrorByKey] = useState<Record<string, string | null>>({})
   const [shellContainerName, setShellContainerName] = useState('')
   const [shellContainerOpen, setShellContainerOpen] = useState(false)
-  const [shellSessions, setShellSessions] = useState<Record<string, ShellSession>>({})
   const containerSelectRef = useRef<HTMLDivElement | null>(null)
   const logsFilterRef = useRef<HTMLDivElement | null>(null)
   const logsLevelFilterRef = useRef<HTMLDivElement | null>(null)
   const logsSearchInputRef = useRef<HTMLInputElement | null>(null)
-  const shell = shellSessions[shellContainerName] ?? EMPTY_SHELL_SESSION
-  const terminalUnavailable = shell.unavailable || isTerminalUnavailableError(shell.error ?? '')
-  const shellInputDisabled = shell.running || shell.tabCompleting || terminalUnavailable
-
-  const updateShell = (updates: Partial<ShellSession>) => {
-    setShellSessions(current => ({
-      ...current,
-      [shellContainerName]: { ...(current[shellContainerName] ?? EMPTY_SHELL_SESSION), ...updates },
-    }))
-  }
-
-  const updateShellFn = (updater: (session: ShellSession) => Partial<ShellSession>) => {
-    setShellSessions(current => {
-      const session = current[shellContainerName] ?? EMPTY_SHELL_SESSION
-      return { ...current, [shellContainerName]: { ...session, ...updater(session) } }
-    })
-  }
-
   const shellContainerRef = useRef<HTMLDivElement | null>(null)
-  const shellViewRef = useRef<HTMLDivElement | null>(null)
-  const shellInputRef = useRef<HTMLInputElement | null>(null)
   const logsViewRef = useRef<HTMLDivElement | null>(null)
   const logsTopLoadLockRef = useRef(false)
   const logsOlderLoadAnchorRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null)
@@ -384,7 +319,6 @@ export default function PodDetailPanel({
     setInitLogsErrorByKey({})
     setVolumeTypeOpenByType({})
     setShellContainerOpen(false)
-    setShellSessions({})
     setExpandedMetadataValues({})
   }, [selectedPod.namespace, selectedPod.name])
 
@@ -550,65 +484,6 @@ export default function PodDetailPanel({
     }
     window.requestAnimationFrame(() => scrollLogsToBottom())
   }, [activeDetailsTab, logsNearBottom, visibleLogs.length])
-
-  useEffect(() => {
-    if (activeDetailsTab !== 'shell') {
-      return
-    }
-    window.requestAnimationFrame(() => {
-      const el = shellViewRef.current
-      if (!el) {
-        return
-      }
-      el.scrollTop = el.scrollHeight
-    })
-  }, [activeDetailsTab, shell.entries.length, shell.running])
-
-  useEffect(() => {
-    if (activeDetailsTab === 'shell') {
-      window.requestAnimationFrame(() => shellInputRef.current?.focus())
-      if (!shell.user && shellContainerName) {
-        const containerForWhoami = shellContainerName
-        void ExecPodCommand(
-          clusterFilename,
-          selectedPod.namespace,
-          selectedPod.name,
-          containerForWhoami,
-          'whoami',
-        ).then((response: unknown) => {
-          const result = toPodExecResult(response)
-          const user = result.stdout.trim()
-          const combinedMessage = `${result.stderr}\n${result.stdout}`.trim()
-          const unavailableFromResult = isTerminalUnavailableError(combinedMessage)
-
-          setShellSessions(current => {
-            const session = current[containerForWhoami] ?? EMPTY_SHELL_SESSION
-            return {
-              ...current,
-              [containerForWhoami]: {
-                ...session,
-                user: user || session.user,
-                error: unavailableFromResult
-                  ? (combinedMessage || 'Terminal is unavailable for this container.')
-                  : session.error,
-                unavailable: session.unavailable || unavailableFromResult,
-              },
-            }
-          })
-        }).catch((errorValue: unknown) => {
-          const message = errorValue instanceof Error ? errorValue.message : String(errorValue)
-          setShellSessions(current => ({
-            ...current,
-            [containerForWhoami]: {
-              ...(current[containerForWhoami] ?? EMPTY_SHELL_SESSION),
-              error: message,
-              unavailable: isTerminalUnavailableError(message),
-            },
-          }))
-        })
-      }
-    }
-  }, [activeDetailsTab, shell.user, shellContainerName, clusterFilename, selectedPod.namespace, selectedPod.name])
 
   useEffect(() => {
     const handleFindShortcut = (event: KeyboardEvent) => {
@@ -1436,251 +1311,6 @@ export default function PodDetailPanel({
     )
   }
 
-  const runShellCommand = (commandOverride?: string) => {
-    if (shellInputDisabled || !shellContainerName.trim()) {
-      return
-    }
-    const command = (commandOverride ?? shell.command).trim()
-    if (!command) {
-      return
-    }
-
-    if (command.toLowerCase() === 'clear') {
-      updateShell({ entries: [], command: '', error: terminalUnavailable ? shell.error : null })
-      return
-    }
-
-    const containerForExec = shellContainerName
-    const currentCwd = shell.cwd
-
-    updateShellFn(s => ({
-      history: [...s.history, command],
-      historyIndex: -1,
-      draft: '',
-      running: true,
-      error: null,
-      command: '',
-    }))
-
-    const wrappedCommand = `export COLUMNS=200; ls() { command ls -C "$@"; }; cd ${currentCwd} && ${command}; __EXIT=$?; pwd; exit $__EXIT`
-
-    void ExecPodCommand(
-      clusterFilename,
-      selectedPod.namespace,
-      selectedPod.name,
-      containerForExec,
-      wrappedCommand,
-    ).then((response: unknown) => {
-      const result = toPodExecResult(response)
-      let displayStdout = result.stdout
-      let newCwd = currentCwd
-      const combinedMessage = `${result.stderr}\n${result.stdout}`.trim()
-      const unavailableFromResult = isTerminalUnavailableError(combinedMessage)
-
-      if (result.stdout) {
-        const lines = result.stdout.split('\n')
-        while (lines.length > 0 && lines[lines.length - 1] === '') {
-          lines.pop()
-        }
-        if (lines.length > 0) {
-          const lastLine = lines[lines.length - 1]
-          if (lastLine.startsWith('/') && !lastLine.includes(' ')) {
-            newCwd = lastLine
-            lines.pop()
-            displayStdout = lines.join('\n')
-          }
-        }
-      }
-
-      setShellSessions(current => {
-        const session = current[containerForExec] ?? EMPTY_SHELL_SESSION
-        return {
-          ...current,
-          [containerForExec]: {
-            ...session,
-            cwd: newCwd,
-            error: unavailableFromResult
-              ? (combinedMessage || 'Terminal is unavailable for this container.')
-              : null,
-            unavailable: session.unavailable || unavailableFromResult,
-            entries: [
-              ...session.entries,
-              {
-                id: Date.now() + session.entries.length,
-                container: result.container || containerForExec,
-                command,
-                stdout: displayStdout,
-                stderr: result.stderr,
-                exitCode: result.exitCode,
-              },
-            ],
-          },
-        }
-      })
-    }).catch((errorValue: unknown) => {
-      const message = errorValue instanceof Error ? errorValue.message : String(errorValue)
-      setShellSessions(current => {
-        const session = current[containerForExec] ?? EMPTY_SHELL_SESSION
-        return {
-          ...current,
-          [containerForExec]: {
-            ...session,
-            entries: [
-              ...session.entries,
-              {
-                id: Date.now() + session.entries.length,
-                container: containerForExec,
-                command,
-                stdout: '',
-                stderr: message,
-                exitCode: 1,
-              },
-            ],
-          },
-        }
-      })
-    }).finally(() => {
-      setShellSessions(current => {
-        const session = current[containerForExec] ?? EMPTY_SHELL_SESSION
-        return { ...current, [containerForExec]: { ...session, running: false } }
-      })
-      window.requestAnimationFrame(() => shellInputRef.current?.focus())
-    })
-  }
-
-  const handleShellTabComplete = () => {
-    if (shell.tabCompleting || shell.running || terminalUnavailable || !shellContainerName.trim()) return
-    const input = shell.command
-    if (!input.trim()) return
-
-    const tokens = input.split(/\s+/)
-    const partial = tokens[tokens.length - 1]
-    if (!partial) return
-
-    const isAbsolute = partial.startsWith('/')
-    const currentCwd = shell.cwd
-    const completionTarget = isAbsolute ? partial : (currentCwd === '/' ? `/${partial}` : `${currentCwd}/${partial}`)
-    const containerForComplete = shellContainerName
-
-    updateShell({ tabCompleting: true })
-
-    void ExecPodCommand(
-      clusterFilename,
-      selectedPod.namespace,
-      selectedPod.name,
-      containerForComplete,
-      `ls -1dp ${completionTarget}* 2>/dev/null`,
-    ).then((response: unknown) => {
-      const result = toPodExecResult(response)
-      const raw = result.stdout.trim()
-      if (!raw) return
-
-      const matches = raw.split('\n').filter(Boolean)
-      if (matches.length === 0) return
-
-      const toToken = (fullPath: string) => {
-        if (isAbsolute) return fullPath
-        const prefix = currentCwd === '/' ? '/' : `${currentCwd}/`
-        return fullPath.startsWith(prefix) ? fullPath.slice(prefix.length) : fullPath
-      }
-
-      if (matches.length === 1) {
-        const completed = toToken(matches[0])
-        const cmdPrefix = tokens.slice(0, -1).join(' ')
-        const newCommand = cmdPrefix ? `${cmdPrefix} ${completed}` : completed
-        setShellSessions(current => {
-          const session = current[containerForComplete] ?? EMPTY_SHELL_SESSION
-          return { ...current, [containerForComplete]: { ...session, command: newCommand } }
-        })
-      } else {
-        const completedTokens = matches.map(toToken)
-        const commonPrefix = completedTokens.reduce((acc, val) => {
-          let i = 0
-          while (i < acc.length && i < val.length && acc[i] === val[i]) i++
-          return acc.slice(0, i)
-        })
-
-        if (commonPrefix.length > partial.length) {
-          const cmdPrefix = tokens.slice(0, -1).join(' ')
-          const newCommand = cmdPrefix ? `${cmdPrefix} ${commonPrefix}` : commonPrefix
-          setShellSessions(current => {
-            const session = current[containerForComplete] ?? EMPTY_SHELL_SESSION
-            return { ...current, [containerForComplete]: { ...session, command: newCommand } }
-          })
-        } else {
-          setShellSessions(current => {
-            const session = current[containerForComplete] ?? EMPTY_SHELL_SESSION
-            return {
-              ...current,
-              [containerForComplete]: {
-                ...session,
-                entries: [
-                  ...session.entries,
-                  {
-                    id: Date.now() + session.entries.length,
-                    container: containerForComplete,
-                    command: input,
-                    stdout: completedTokens.join('  '),
-                    stderr: '',
-                    exitCode: 0,
-                  },
-                ],
-              },
-            }
-          })
-        }
-      }
-    }).catch(() => {
-      // silently ignore tab completion errors
-    }).finally(() => {
-      setShellSessions(current => {
-        const session = current[containerForComplete] ?? EMPTY_SHELL_SESSION
-        return { ...current, [containerForComplete]: { ...session, tabCompleting: false } }
-      })
-      window.requestAnimationFrame(() => shellInputRef.current?.focus())
-    })
-  }
-
-  const handleShellKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Tab') {
-      event.preventDefault()
-      handleShellTabComplete()
-      return
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      runShellCommand()
-      return
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      if (shell.history.length === 0) return
-      if (shell.historyIndex === -1) {
-        updateShell({ draft: shell.command, historyIndex: shell.history.length - 1, command: shell.history[shell.history.length - 1] })
-      } else if (shell.historyIndex > 0) {
-        const newIndex = shell.historyIndex - 1
-        updateShell({ historyIndex: newIndex, command: shell.history[newIndex] })
-      }
-      return
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault()
-      if (shell.historyIndex === -1) return
-      if (shell.historyIndex < shell.history.length - 1) {
-        const newIndex = shell.historyIndex + 1
-        updateShell({ historyIndex: newIndex, command: shell.history[newIndex] })
-      } else {
-        updateShell({ historyIndex: -1, command: shell.draft })
-      }
-      return
-    }
-    if ((event.key === 'l' && event.ctrlKey) || (event.key === 'k' && event.metaKey)) {
-      event.preventDefault()
-      updateShell({ entries: [], error: null })
-      return
-    }
-  }
-
   const renderShellTab = () => {
     if (shellContainerOptions.length === 0) {
       return <div className="pods-container-empty">No running containers available for shell</div>
@@ -1743,86 +1373,20 @@ export default function PodDetailPanel({
             </div>
           </div>
 
-          {terminalUnavailable && (
-            <div className="pods-shell-unavailable-bar">
-              <span className="pods-shell-unavailable-info">
-                {shell.error || 'Terminal unavailable'}
-              </span>
-            </div>
-          )}
-
-          <div
-            className="pods-shell-body"
-            ref={shellViewRef}
-            onClick={() => {
-              if (shellInputDisabled) return
-              const selection = window.getSelection()
-              if (selection && selection.toString().length > 0) return
-              shellInputRef.current?.focus()
-            }}
-          >
-            {shell.error && !terminalUnavailable && (
-              <div className="pods-shell-error-line">{shell.error}</div>
-            )}
-            {shell.entries.map(entry => {
-              const combinedOutput = `${entry.stderr}\n${entry.stdout}`.trim()
-              const hasError = entry.exitCode !== 0 || isTerminalUnavailableError(combinedOutput)
-              return (
-                <div key={entry.id} className="pods-shell-block">
-                  {!hasError && (
-                    <div className="pods-shell-prompt-line">
-                      <span className="pods-shell-prompt-container">{shell.user || 'user'}@{selectedPod.name}</span>
-                      <span className="pods-shell-prompt-sep">:</span>
-                      <span className="pods-shell-prompt-cwd">{shell.cwd}</span>
-                      <span className="pods-shell-prompt-dollar"> $</span>
-                      <span className="pods-shell-prompt-cmd"> {entry.command}</span>
-                    </div>
-                  )}
-                  {hasError ? (
-                    <pre className="pods-shell-stderr">
-                      {combinedOutput || 'Command failed.'}
-                    </pre>
-                  ) : (
-                    <>
-                      {entry.stdout && (
-                        <pre className="pods-shell-stdout">{entry.stdout}</pre>
-                      )}
-                      {entry.stderr && (
-                        <pre className="pods-shell-stderr">{entry.stderr}</pre>
-                      )}
-                    </>
-                  )}
-                </div>
-              )
-            })}
-            {shell.running && (
-              <div className="pods-shell-running-line">
-                <span className="pods-shell-cursor-blink" />
-              </div>
-            )}
-            {!terminalUnavailable && (
-              <div className={`pods-shell-input-line ${shellInputDisabled ? 'disabled' : ''}`}>
-                <span className="pods-shell-prompt-container">{shell.user || 'user'}@{selectedPod.name}</span>
-                <span className="pods-shell-prompt-sep">:</span>
-                <span className="pods-shell-prompt-cwd">{shell.cwd}</span>
-                <span className="pods-shell-prompt-dollar"> $</span>
-                <input
-                  ref={shellInputRef}
-                  type="text"
-                  className="pods-shell-inline-input"
-                  value={shell.command}
-                  onChange={event => {
-                    if (shellInputDisabled) {
-                      return
-                    }
-                    updateShell({ command: event.target.value, historyIndex: -1 })
-                  }}
-                  onKeyDown={handleShellKeyDown}
-                  spellCheck={false}
-                  autoComplete="off"
-                  disabled={shellInputDisabled}
-                />
-              </div>
+          <div className="pods-shell-body">
+            {shellContainerName && (
+              <TerminalSessionView
+                key={`${selectedPod.namespace}/${selectedPod.name}/${shellContainerName}`}
+                target={{
+                  kind: 'pod',
+                  filename: clusterFilename,
+                  namespace: selectedPod.namespace,
+                  podName: selectedPod.name,
+                  container: shellContainerName,
+                }}
+                active={activeDetailsTab === 'shell'}
+                className="pods-shell-terminal-session"
+              />
             )}
           </div>
         </div>

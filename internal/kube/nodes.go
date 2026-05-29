@@ -44,30 +44,30 @@ type NodeAddress struct {
 }
 
 type NodeDetail struct {
-	Name            string              `json:"name"`
-	Role            string              `json:"role"`
-	Status          string              `json:"status"`
-	Version         string              `json:"version"`
-	KernelVersion   string              `json:"kernelVersion"`
-	OS              string              `json:"os"`
-	Architecture    string              `json:"architecture"`
-	ContainerRuntime string            `json:"containerRuntime"`
-	CPU             string              `json:"cpu"`
-	Memory          string              `json:"memory"`
-	Pods            string              `json:"pods"`
-	CPUAllocatable  string              `json:"cpuAllocatable"`
-	MemAllocatable  string              `json:"memAllocatable"`
-	PodAllocatable  string              `json:"podAllocatable"`
-	Age             string              `json:"age"`
-	Created         string              `json:"created"`
-	UID             string              `json:"uid"`
-	Labels          map[string]string   `json:"labels"`
-	Annotations     map[string]string   `json:"annotations"`
-	Conditions      []NodeConditionInfo `json:"conditions"`
-	Taints          []NodeTaint         `json:"taints"`
-	Addresses       []NodeAddress       `json:"addresses"`
-	Events          []PodDetailEvent    `json:"events"`
-	Manifest        string              `json:"manifest"`
+	Name             string              `json:"name"`
+	Role             string              `json:"role"`
+	Status           string              `json:"status"`
+	Version          string              `json:"version"`
+	KernelVersion    string              `json:"kernelVersion"`
+	OS               string              `json:"os"`
+	Architecture     string              `json:"architecture"`
+	ContainerRuntime string              `json:"containerRuntime"`
+	CPU              string              `json:"cpu"`
+	Memory           string              `json:"memory"`
+	Pods             string              `json:"pods"`
+	CPUAllocatable   string              `json:"cpuAllocatable"`
+	MemAllocatable   string              `json:"memAllocatable"`
+	PodAllocatable   string              `json:"podAllocatable"`
+	Age              string              `json:"age"`
+	Created          string              `json:"created"`
+	UID              string              `json:"uid"`
+	Labels           map[string]string   `json:"labels"`
+	Annotations      map[string]string   `json:"annotations"`
+	Conditions       []NodeConditionInfo `json:"conditions"`
+	Taints           []NodeTaint         `json:"taints"`
+	Addresses        []NodeAddress       `json:"addresses"`
+	Events           []PodDetailEvent    `json:"events"`
+	Manifest         string              `json:"manifest"`
 }
 
 func (c *Client) GetNodeResources(ctx context.Context) ([]NodeResource, error) {
@@ -243,7 +243,7 @@ func (c *Client) DebugNode(ctx context.Context, nodeName string) (*PodExecResult
 			Containers: []corev1.Container{
 				{
 					Name:    "debugger",
-					Image:   "busybox:latest",
+					Image:   "debian:bookworm-slim",
 					Command: []string{"sleep", "3600"},
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: &privileged,
@@ -265,7 +265,7 @@ func (c *Client) DebugNode(ctx context.Context, nodeName string) (*PodExecResult
 
 	return &PodExecResult{
 		Container: "debugger",
-		Command:   fmt.Sprintf("kubectl exec -it %s -n default -- nsenter -t 1 -m -u -i -n -p -- sh", created.Name),
+		Command:   fmt.Sprintf("kubectl exec -it %s -n default -- nsenter -t 1 -m -u -i -n -p -- sh -i", created.Name),
 		Stdout:    fmt.Sprintf("Debug pod '%s' created on node '%s'. Use the shell tab to exec into it.", created.Name, nodeName),
 		Stderr:    "",
 		ExitCode:  0,

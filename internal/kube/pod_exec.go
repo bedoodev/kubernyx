@@ -84,7 +84,9 @@ func (c *Client) ExecPodCommand(ctx context.Context, namespace string, podName s
 		Container: targetContainer,
 		Command: []string{
 			"sh",
-			"-lc",
+			// Avoid login-shell startup scripts on every exec. Those scripts can
+			// emit warnings to stderr even when the target command succeeds.
+			"-c",
 			command,
 		},
 		Stdin:  false,
