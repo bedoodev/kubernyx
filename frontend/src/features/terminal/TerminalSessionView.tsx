@@ -64,12 +64,49 @@ export default function TerminalSessionView({ target, active, className = '' }: 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const fitFrameRef = useRef<number | null>(null)
+  const lastTerminalSizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const activeRef = useRef(active)
   const statusStateRef = useRef<string>(buildInitialState(target).state)
   const pendingOutputRef = useRef<string[]>([])
   const [statusState, setStatusState] = useState<string>(buildInitialState(target).state)
   const [statusMessage, setStatusMessage] = useState<string | undefined>(buildInitialState(target).message)
   const [closedInfo, setClosedInfo] = useState<{ exitCode: number; error?: string } | null>(null)
+
+  const fitAndResizeTerminal = (options: { force?: boolean; focus?: boolean } = {}) => {
+    if (fitFrameRef.current !== null) {
+      window.cancelAnimationFrame(fitFrameRef.current)
+    }
+
+    fitFrameRef.current = window.requestAnimationFrame(() => {
+      fitFrameRef.current = null
+      const terminal = terminalRef.current
+      const fitAddon = fitAddonRef.current
+      if (!terminal || !fitAddon || !activeRef.current) {
+        return
+      }
+
+      fitAddon.fit()
+      if (terminal.cols <= 0 || terminal.rows <= 0) {
+        return
+      }
+
+      const nextSize = { cols: terminal.cols, rows: terminal.rows }
+      const previousSize = lastTerminalSizeRef.current
+      const sizeChanged = !previousSize || previousSize.cols !== nextSize.cols || previousSize.rows !== nextSize.rows
+      if (sizeChanged || options.force) {
+        lastTerminalSizeRef.current = nextSize
+        terminal.refresh(0, Math.max(0, terminal.rows - 1))
+        if (statusStateRef.current === 'connected') {
+          void ResizeTerminalSession(sessionId, nextSize.cols, nextSize.rows)
+        }
+      }
+
+      if (options.focus) {
+        terminal.focus()
+      }
+    })
+  }
 
   useEffect(() => {
     activeRef.current = active
@@ -122,12 +159,6 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       fitAddonRef.current = fitAddon
       terminalInstance = terminal
 
-      const focusTerminal = () => {
-        if (activeRef.current) {
-          terminal.focus()
-        }
-      }
-
       const flushPendingOutput = () => {
         if (pendingOutputRef.current.length === 0) {
           return
@@ -136,29 +167,19 @@ export default function TerminalSessionView({ target, active, className = '' }: 
         pendingOutputRef.current = []
       }
 
-      const fitTerminal = () => {
-        if (!activeRef.current) {
-          return
-        }
-        fitAddon.fit()
-        if (terminal.cols <= 0 || terminal.rows <= 0) {
-          return
-        }
-        void ResizeTerminalSession(sessionId, terminal.cols, terminal.rows)
-      }
-
       flushPendingOutput()
-      fitTerminal()
-      if (statusStateRef.current === 'connected') {
-        focusTerminal()
-      }
+      fitAndResizeTerminal({ force: true, focus: statusStateRef.current === 'connected' })
 
       resizeObserver = new ResizeObserver(() => {
-        window.requestAnimationFrame(fitTerminal)
+        fitAndResizeTerminal()
       })
       resizeObserver.observe(container)
 
-      const handlePointerDown = () => focusTerminal()
+      const handlePointerDown = () => {
+        if (activeRef.current) {
+          terminal.focus()
+        }
+      }
       container.addEventListener('pointerdown', handlePointerDown)
       detachFocusHandler = () => {
         container.removeEventListener('pointerdown', handlePointerDown)
@@ -180,12 +201,17 @@ export default function TerminalSessionView({ target, active, className = '' }: 
 
     return () => {
       disposed = true
+      if (fitFrameRef.current !== null) {
+        window.cancelAnimationFrame(fitFrameRef.current)
+        fitFrameRef.current = null
+      }
       resizeObserver?.disconnect()
       detachFocusHandler?.()
       dataDisposable?.dispose()
       terminalInstance?.dispose()
       terminalRef.current = null
       fitAddonRef.current = null
+      lastTerminalSizeRef.current = null
     }
   }, [])
 
@@ -221,14 +247,7 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       setStatusMessage(event.message)
       if (event.state === 'connected') {
         setClosedInfo(null)
-        window.requestAnimationFrame(() => {
-          fitAddonRef.current?.fit()
-          const terminal = terminalRef.current
-          if (active && terminal && terminal.cols > 0 && terminal.rows > 0) {
-            void ResizeTerminalSession(sessionId, terminal.cols, terminal.rows)
-            terminal.focus()
-          }
-        })
+        fitAndResizeTerminal({ force: true, focus: true })
       }
     })
 
@@ -267,14 +286,7 @@ export default function TerminalSessionView({ target, active, className = '' }: 
     if (!active) {
       return
     }
-    window.requestAnimationFrame(() => {
-      fitAddonRef.current?.fit()
-      const terminal = terminalRef.current
-      if (terminal && terminal.cols > 0 && terminal.rows > 0) {
-        void ResizeTerminalSession(sessionId, terminal.cols, terminal.rows)
-        terminal.focus()
-      }
-    })
+    fitAndResizeTerminal({ force: true, focus: statusStateRef.current === 'connected' })
   }, [active, statusState])
 
   return (

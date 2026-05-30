@@ -1385,6 +1385,16 @@
   overflow: auto;
 }
 
+.pod-detail-body.manifest-mode {
+  overflow: hidden;
+}
+
+.pod-detail-body.shell-mode {
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+
 .pod-detail-overview {
   display: flex;
   flex-direction: column;

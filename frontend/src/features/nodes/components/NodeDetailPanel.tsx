@@ -125,7 +125,7 @@ export default function NodeDetailPanel({
         </div>
       </div>
 
-      <div className="pod-detail-body">
+      <div className={`pod-detail-body ${activeDetailsTab === 'yaml' ? 'manifest-mode' : activeDetailsTab === 'shell' ? 'shell-mode' : ''}`}>
         {nodeDetailError ? (
           <div className="pods-empty-row error">{nodeDetailError}</div>
         ) : activeDetailsTab === 'shell' ? (
@@ -144,7 +144,15 @@ export default function NodeDetailPanel({
         ) : nodeDetailLoading && !nodeDetail ? (
           <div className="pods-empty-row">Loading node details...</div>
         ) : activeDetailsTab === 'yaml' ? (
-          <YamlEditor value={nodeDetail?.manifest ?? '-'} />
+          <section className="pods-detail-section pods-detail-manifest-section">
+            <YamlEditor
+              title={`${selectedNode.name}.yaml`}
+              value={nodeDetail?.manifest ?? '-'}
+              readOnly
+              minHeight={0}
+              className="pods-detail-manifest-editor"
+            />
+          </section>
         ) : (
           <div className="pod-detail-overview">
             <section className="pod-detail-section">
