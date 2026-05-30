@@ -25,6 +25,20 @@ func TestFindExecutableInPath(t *testing.T) {
 	}
 }
 
+func TestInteractiveShellArgsSkipsUserStartupFiles(t *testing.T) {
+	t.Parallel()
+
+	zshArgs := strings.Join(interactiveShellArgs("/bin/zsh"), " ")
+	if zshArgs != "-f -i" {
+		t.Fatalf("expected zsh to skip user startup files, got %q", zshArgs)
+	}
+
+	bashArgs := strings.Join(interactiveShellArgs("/bin/bash"), " ")
+	if bashArgs != "--noprofile --norc -i" {
+		t.Fatalf("expected bash to skip user startup files, got %q", bashArgs)
+	}
+}
+
 func TestBuildCommandSpecForPod(t *testing.T) {
 	t.Parallel()
 
@@ -47,7 +61,8 @@ func TestBuildCommandSpecForPod(t *testing.T) {
 	for _, expected := range []string{
 		"--kubeconfig /tmp/demo-kubeconfig",
 		"exec -it pod-a -n default -c main -- sh -lc",
-		"bash --noprofile --norc -i",
+		"LS_COLORS=",
+		"ls --color=never",
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("expected %q in args %q", expected, joined)
@@ -71,7 +86,7 @@ func TestBuildCommandSpecForNode(t *testing.T) {
 	if !strings.Contains(joined, "exec -it kubernyx-debug -n default -- nsenter -t 1 -m -u -i -n -p -- sh -lc") {
 		t.Fatalf("unexpected node exec args: %q", joined)
 	}
-	if !strings.Contains(joined, "bash --noprofile --norc -i") {
+	if !strings.Contains(joined, "ls --color=never") {
 		t.Fatalf("unexpected node exec args: %q", joined)
 	}
 }

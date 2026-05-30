@@ -32,7 +32,26 @@ type CommandSpec struct {
 }
 
 func buildInteractiveShellBootstrap() string {
-	return `if command -v bash >/dev/null 2>&1; then export CLICOLOR=0 CLICOLOR_FORCE=0 NO_COLOR=1 LS_COLORS=''; export PS1='\u@\h:\w\$ '; exec bash --noprofile --norc -i; elif command -v ash >/dev/null 2>&1; then export PS1='# '; exec ash -i; else export PS1='# '; exec sh -i; fi`
+	return `profile="/tmp/kubernyx-shell.$$"; cat > "$profile" <<'EOF'
+export TERM=xterm
+export NO_COLOR=1
+export CLICOLOR=0
+export CLICOLOR_FORCE=0
+export LS_COLORS=
+export PS1='# '
+unset PROMPT_COMMAND
+ls() {
+  command ls --color=never "$@" 2>/dev/null
+  code=$?
+  if [ "$code" -eq 0 ]; then
+    return 0
+  fi
+  command ls "$@"
+}
+EOF
+if command -v ash >/dev/null 2>&1; then ENV="$profile" ash -i; code=$?; rm -f "$profile"; exit "$code"; fi
+if command -v bash >/dev/null 2>&1; then bash --noprofile --rcfile "$profile" -i; code=$?; rm -f "$profile"; exit "$code"; fi
+ENV="$profile" sh -i; code=$?; rm -f "$profile"; exit "$code"`
 }
 
 func buildTerminalEnv(kubeconfigPath string) []string {
@@ -102,6 +121,17 @@ func findExecutableInPath(name string, searchPath string) (string, bool) {
 	return "", false
 }
 
+func interactiveShellArgs(shellPath string) []string {
+	switch filepath.Base(shellPath) {
+	case "zsh":
+		return []string{"-f", "-i"}
+	case "bash":
+		return []string{"--noprofile", "--norc", "-i"}
+	default:
+		return []string{"-i"}
+	}
+}
+
 func BuildCommandSpec(target Target, kubeconfigPath string, debugPodName string) (CommandSpec, error) {
 	switch target.Kind {
 	case TargetKindCluster:
@@ -112,7 +142,7 @@ func BuildCommandSpec(target Target, kubeconfigPath string, debugPodName string)
 
 		return CommandSpec{
 			Command: resolveExecutable(shellPath),
-			Args:    []string{"-i"},
+			Args:    interactiveShellArgs(shellPath),
 			Env:     buildTerminalEnv(kubeconfigPath),
 			Dir:     userHomeDir(),
 		}, nil
