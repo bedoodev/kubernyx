@@ -371,6 +371,10 @@ const YamlEditor = memo(function YamlEditor({
               }}
               placeholder="Search..."
               aria-label="Search YAML"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
             {searchCounterLabel && (
               <span className="yaml-editor-search-count">{searchCounterLabel}</span>

@@ -62,6 +62,10 @@ export default function NamespaceFilter({ namespaces, selected, onChange }: Prop
             placeholder="Search namespaces..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="off"
             autoFocus
           />
           <div className="ns-options">

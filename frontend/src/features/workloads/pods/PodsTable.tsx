@@ -18,6 +18,8 @@ interface Props {
   showInlineDetails?: boolean
   externalSelectedPodKey?: string | null
   onPodActivate?: (pod: PodResource, options: { pin: boolean }) => void
+  search: string
+  onSearchChange: (value: string) => void
 }
 
 const STATUS_ALL = 'all'
@@ -85,10 +87,11 @@ export default function PodsTable({
   showInlineDetails = true,
   externalSelectedPodKey = null,
   onPodActivate,
+  search,
+  onSearchChange,
 }: Props) {
   const { items, loading, error } = usePodsStream(clusterFilename, selectedNamespaces)
 
-  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_ALL)
   const [pageSize, setPageSize] = useState<number>(20)
   const [page, setPage] = useState<number>(1)
@@ -493,7 +496,11 @@ export default function PodsTable({
               className="pods-search"
               placeholder="Search by name, namespace, owner, status, annotations or labels"
               value={search}
-              onChange={event => setSearch(event.target.value)}
+              onChange={event => onSearchChange(event.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
             <div className={`pods-status-select ${statusFilterOpen ? 'open' : ''}`} ref={statusFilterRef}>
               <button
@@ -741,7 +748,7 @@ export default function PodsTable({
       )}
 
       {deleteConfirmOpen && (
-        <Modal title={`Delete ${selectedCount} Pod${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Delete ${selectedCount} Pod${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>Delete {selectedCount} selected pod{selectedCount === 1 ? '' : 's'}?</p>
           {deleteError && (
             <div className="pods-detail-alert error">{deleteError}</div>

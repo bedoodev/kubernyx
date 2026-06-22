@@ -394,7 +394,7 @@ export default function ConfigDetailPanel({
         )}
       </div>
       {deleteConfirmOpen && (
-        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>
             Delete {resourceLabel.toLowerCase()} <strong>{selectedResource.name}</strong> in
             {' '}
@@ -406,7 +406,7 @@ export default function ConfigDetailPanel({
             <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn-primary" onClick={deleteResource} disabled={deletePending}>
+            <button type="button" className="btn-danger" onClick={deleteResource} disabled={deletePending}>
               {deletePending ? 'Deleting...' : 'Delete'}
             </button>
           </div>

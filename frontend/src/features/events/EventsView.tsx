@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ClusterInfo } from '../../shared/types'
 import { formatAgeFromUnix } from '../../shared/utils/formatting'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
+import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import { useClusterEvents } from './hooks/useClusterEvents'
 import '../workloads/pods/PodsTable.css'
 import '../config/ConfigView.css'
@@ -32,6 +33,13 @@ const COLUMNS: Column[] = [
 ]
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const
+type EventTypeFilter = 'all' | 'Warning' | 'Normal'
+
+const TYPE_FILTER_OPTIONS: Array<{ value: EventTypeFilter; label: string }> = [
+  { value: 'all', label: 'All Types' },
+  { value: 'Warning', label: 'Warning' },
+  { value: 'Normal', label: 'Normal' },
+]
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -44,19 +52,31 @@ export default function EventsView({
   onNamespacesChange,
 }: Props) {
   const { items, loading, error } = useClusterEvents(cluster.filename, selectedNamespaces)
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'Warning' | 'Normal'>('all')
+  const [search, setSearch] = useScopedSearch(`events:${cluster.filename}`)
+  const [typeFilter, setTypeFilter] = useState<EventTypeFilter>('all')
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false)
   const [pageSize, setPageSize] = useState<number>(50)
   const [page, setPage] = useState<number>(1)
   const [sortKey, setSortKey] = useState<ColumnKey>('age')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [nowUnix, setNowUnix] = useState(() => Math.floor(Date.now() / 1000))
+  const typeFilterRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const tick = window.setInterval(() => {
       setNowUnix(Math.floor(Date.now() / 1000))
     }, 1000)
     return () => window.clearInterval(tick)
+  }, [])
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      if (typeFilterRef.current && !typeFilterRef.current.contains(event.target as Node)) {
+        setTypeFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleDocumentMouseDown)
+    return () => document.removeEventListener('mousedown', handleDocumentMouseDown)
   }, [])
 
   const filteredItems = useMemo(() => {
@@ -113,6 +133,7 @@ export default function EventsView({
   }
 
   const rowCountLabel = loading ? '...' : String(sortedItems.length)
+  const typeFilterLabel = TYPE_FILTER_OPTIONS.find(option => option.value === typeFilter)?.label ?? 'All Types'
 
   return (
     <div className="config-view">
@@ -137,22 +158,49 @@ export default function EventsView({
                 <div className="pods-resource-count">
                   <strong>{rowCountLabel}</strong>
                 </div>
-                <select
-                  className="pods-page-size"
-                  value={typeFilter}
-                  onChange={event => setTypeFilter(event.target.value as typeof typeFilter)}
-                  style={{ marginRight: '8px' }}
-                >
-                  <option value="all">All Types</option>
-                  <option value="Warning">Warning</option>
-                  <option value="Normal">Normal</option>
-                </select>
                 <input
                   className="pods-search"
                   placeholder="Search events..."
                   value={search}
                   onChange={event => setSearch(event.target.value)}
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoComplete="off"
                 />
+                <div className={`pods-status-select ${typeFilterOpen ? 'open' : ''}`} ref={typeFilterRef}>
+                  <button
+                    type="button"
+                    className={`pods-status-trigger ${typeFilterOpen ? 'open' : ''}`}
+                    onClick={() => setTypeFilterOpen(current => !current)}
+                    aria-haspopup="listbox"
+                    aria-expanded={typeFilterOpen}
+                  >
+                    <span className="pods-status-trigger-value">{typeFilterLabel}</span>
+                    <svg className="pods-status-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {typeFilterOpen && (
+                    <div className="pods-status-dropdown" role="listbox" aria-label="Event type filter">
+                      {TYPE_FILTER_OPTIONS.map(option => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="option"
+                          className={`pods-status-option ${typeFilter === option.value ? 'selected' : ''}`}
+                          aria-selected={typeFilter === option.value}
+                          onClick={() => {
+                            setTypeFilter(option.value)
+                            setTypeFilterOpen(false)
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="pods-table-wrap">

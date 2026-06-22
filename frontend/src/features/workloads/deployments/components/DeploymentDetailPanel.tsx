@@ -1252,6 +1252,10 @@ export default function DeploymentDetailPanel({
                   onChange={event => setLogsSearchQuery(event.target.value)}
                   placeholder="Search logs..."
                   aria-label={`Search ${workloadLabel.toLowerCase()} logs`}
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoComplete="off"
                 />
               </div>
 
@@ -1526,7 +1530,7 @@ export default function DeploymentDetailPanel({
         )}
       </div>
       {deleteConfirmOpen && (
-        <Modal title={`Confirm Delete ${workloadLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Confirm Delete ${workloadLabel}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>
             Delete {workloadLabel.toLowerCase()} <strong>{selectedDeployment.name}</strong> in
             {' '}
@@ -1538,7 +1542,7 @@ export default function DeploymentDetailPanel({
             <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn-primary" onClick={deleteWorkload} disabled={deletePending}>
+            <button type="button" className="btn-danger" onClick={deleteWorkload} disabled={deletePending}>
               {deletePending ? 'Deleting...' : 'Delete'}
             </button>
           </div>

@@ -14,6 +14,8 @@ interface Props {
   configTab: ImplementedConfigTabId
   externalSelectedConfigKey?: string | null
   onConfigActivate?: (resource: ConfigResource, options: { pin: boolean }) => void
+  search: string
+  onSearchChange: (value: string) => void
 }
 
 type ConfigColumnKey = 'name' | 'namespace' | 'keys' | 'type' | 'age'
@@ -59,9 +61,10 @@ export default function ConfigTable({
   configTab,
   externalSelectedConfigKey = null,
   onConfigActivate,
+  search,
+  onSearchChange,
 }: Props) {
   const { items, loading, error } = useConfigResources(clusterFilename, selectedNamespaces, configTab)
-  const [search, setSearch] = useState('')
   const [pageSize, setPageSize] = useState<number>(20)
   const [page, setPage] = useState<number>(1)
   const [sortKey, setSortKey] = useState<ConfigColumnKey>('name')
@@ -248,7 +251,11 @@ export default function ConfigTable({
               className="pods-search"
               placeholder="Search by name, namespace, key count or type"
               value={search}
-              onChange={event => setSearch(event.target.value)}
+              onChange={event => onSearchChange(event.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
           </div>
 
@@ -424,7 +431,7 @@ export default function ConfigTable({
       </div>
 
       {deleteConfirmOpen && (
-        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>Delete {selectedCount} selected {resourceLabel.toLowerCase()}{selectedCount === 1 ? '' : 's'}?</p>
           {deleteError && (
             <div className="pods-detail-alert error">{deleteError}</div>

@@ -1,4 +1,5 @@
 import type { ClusterInfo, ConfigResource, ConfigTabId } from '../../shared/types'
+import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
 import ConfigTable from './ConfigTable'
 import { configPluralLabel, isImplementedConfigTab } from './configKinds'
@@ -23,6 +24,8 @@ export default function ConfigView({
   activeConfigKey,
   onConfigActivate,
 }: Props) {
+  const [search, setSearch] = useScopedSearch(`config:${cluster.filename}:${activeTab}`)
+
   return (
     <div className="config-view">
       <div className="config-view-header">
@@ -46,6 +49,8 @@ export default function ConfigView({
             configTab={activeTab}
             externalSelectedConfigKey={activeConfigKey}
             onConfigActivate={onConfigActivate}
+            search={search}
+            onSearchChange={setSearch}
           />
         ) : (
           <div className="config-empty-panel">

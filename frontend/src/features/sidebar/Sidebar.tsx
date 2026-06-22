@@ -3,6 +3,7 @@ import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS } from '.
 import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
 import EditClusterModal from './components/EditClusterModal'
+import SidebarNavIcon from './components/SidebarNavIcon'
 import './Sidebar.css'
 
 interface Props {
@@ -172,6 +173,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       items.push({ type: 'cluster', cluster: c })
       if (expandedClusters.includes(c.filename)) {
         items.push({ type: 'overview', cluster: c })
+        items.push({ type: 'nodes', cluster: c })
+        items.push({ type: 'events', cluster: c })
         items.push({ type: 'workloads-toggle', cluster: c })
         if (expandedWorkloads.includes(c.filename)) {
           for (const tab of WORKLOAD_TAB_OPTIONS) {
@@ -190,8 +193,6 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             items.push({ type: 'network-tab', cluster: c, tabId: tab.id })
           }
         }
-        items.push({ type: 'nodes', cluster: c })
-        items.push({ type: 'events', cluster: c })
       }
     }
     return items
@@ -336,6 +337,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             placeholder="Search clusters..."
             value={clusterSearch}
             onChange={event => setClusterSearch(event.target.value)}
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="off"
           />
         </div>
 
@@ -408,7 +413,42 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                 onSelect(c, 'overview')
                               }}
                             >
-                              <span>Overview</span>
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="overview" />
+                                <span>Overview</span>
+                              </span>
+                            </button>
+                          )})()}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item ${nodesActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelect(c, 'nodes')
+                              }}
+                            >
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="nodes" />
+                                <span>Nodes</span>
+                              </span>
+                            </button>
+                          )})()}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item ${eventsActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                onSelect(c, 'events')
+                              }}
+                            >
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="events" />
+                                <span>Events</span>
+                              </span>
                             </button>
                           )})()}
                           {(() => { const idx = navIdx++; return (
@@ -421,7 +461,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                 toggleWorkloads(c.filename)
                               }}
                             >
-                              <span>Workloads</span>
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="workloads" />
+                                <span>Workloads</span>
+                              </span>
                               <svg className={`cluster-sub-chevron ${workloadsExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path d="M7 5l6 5-6 5V5z" />
                               </svg>
@@ -442,7 +485,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                     onSelect(c, 'workloads', tab.id)
                                   }}
                                 >
-                                  {tab.label}
+                                  <span className="cluster-nav-label">
+                                    <SidebarNavIcon name={tab.id} />
+                                    <span>{tab.label}</span>
+                                  </span>
                                 </button>
                               )
                             })}
@@ -458,7 +504,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                 toggleConfigs(c.filename)
                               }}
                             >
-                              <span>Config</span>
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="config" />
+                                <span>Config</span>
+                              </span>
                               <svg className={`cluster-sub-chevron ${configExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path d="M7 5l6 5-6 5V5z" />
                               </svg>
@@ -479,7 +528,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                     onSelect(c, 'config', undefined, tab.id)
                                   }}
                                 >
-                                  {tab.label}
+                                  <span className="cluster-nav-label">
+                                    <SidebarNavIcon name={tab.id} />
+                                    <span>{tab.label}</span>
+                                  </span>
                                 </button>
                               )
                             })}
@@ -495,7 +547,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                 toggleNetwork(c.filename)
                               }}
                             >
-                              <span>Network</span>
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="network" />
+                                <span>Network</span>
+                              </span>
                               <svg className={`cluster-sub-chevron ${networkExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                 <path d="M7 5l6 5-6 5V5z" />
                               </svg>
@@ -516,38 +571,15 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                     onSelect(c, 'network', undefined, undefined, tab.id)
                                   }}
                                 >
-                                  {tab.label}
+                                  <span className="cluster-nav-label">
+                                    <SidebarNavIcon name={tab.id} />
+                                    <span>{tab.label}</span>
+                                  </span>
                                 </button>
                               )
                             })}
                           </div>
                         )}
-                          {(() => { const idx = navIdx++; return (
-                            <button
-                              type="button"
-                              className={`cluster-sub-item ${nodesActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
-                              data-nav-focused={focusedNavIndex === idx || undefined}
-                              onClick={e => {
-                                e.stopPropagation()
-                                onSelect(c, 'nodes')
-                              }}
-                            >
-                              <span>Nodes</span>
-                            </button>
-                          )})()}
-                          {(() => { const idx = navIdx++; return (
-                            <button
-                              type="button"
-                              className={`cluster-sub-item ${eventsActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
-                              data-nav-focused={focusedNavIndex === idx || undefined}
-                              onClick={e => {
-                                e.stopPropagation()
-                                onSelect(c, 'events')
-                              }}
-                            >
-                              <span>Events</span>
-                            </button>
-                          )})()}
                       </>
                     )}
                   </>

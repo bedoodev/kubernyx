@@ -14,6 +14,8 @@ interface Props {
   networkTab: NetworkTabId
   externalSelectedKey?: string | null
   onResourceActivate?: (resource: DeploymentResource, options: { pin: boolean }) => void
+  search: string
+  onSearchChange: (value: string) => void
 }
 
 type ColumnKey = 'name' | 'namespace' | 'ports' | 'type' | 'selector' | 'age'
@@ -57,9 +59,10 @@ export default function NetworkTable({
   networkTab,
   externalSelectedKey = null,
   onResourceActivate,
+  search,
+  onSearchChange,
 }: Props) {
   const { items, loading, error } = useNetworkResources(clusterFilename, selectedNamespaces, networkTab)
-  const [search, setSearch] = useState('')
   const [pageSize, setPageSize] = useState<number>(20)
   const [page, setPage] = useState<number>(1)
   const [sortKey, setSortKey] = useState<ColumnKey>('name')
@@ -221,7 +224,11 @@ export default function NetworkTable({
               className="pods-search"
               placeholder={`Search ${pluralLabel.toLowerCase()}...`}
               value={search}
-              onChange={event => setSearch(event.target.value)}
+              onChange={event => onSearchChange(event.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
           </div>
 
@@ -341,7 +348,7 @@ export default function NetworkTable({
       </div>
 
       {deleteConfirmOpen && (
-        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>Delete {selectedCount} selected {resourceLabel.toLowerCase()}{selectedCount === 1 ? '' : 's'}?</p>
           {deleteError && (
             <div className="pods-detail-alert error">{deleteError}</div>

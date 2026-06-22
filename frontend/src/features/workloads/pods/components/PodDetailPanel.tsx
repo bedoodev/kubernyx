@@ -1224,6 +1224,10 @@ export default function PodDetailPanel({
               onChange={event => setLogsSearchQuery(event.target.value)}
               placeholder="Search logs..."
               aria-label="Search logs"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
           </div>
 
@@ -1960,13 +1964,13 @@ export default function PodDetailPanel({
       )}
 
       {deleteConfirmOpen && (
-        <Modal title="Confirm Delete Pod" onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title="Confirm Delete Pod" onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>Delete pod <strong>{selectedPod.name}</strong> in <strong>{selectedPod.namespace}</strong> namespace?</p>
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn-primary" onClick={deletePod} disabled={deletePending}>
+            <button type="button" className="btn-danger" onClick={deletePod} disabled={deletePending}>
               {deletePending ? 'Deleting...' : 'Delete'}
             </button>
           </div>

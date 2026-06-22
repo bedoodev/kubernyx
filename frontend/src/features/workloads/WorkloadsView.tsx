@@ -1,4 +1,5 @@
 import type { ClusterInfo, DeploymentResource, PodResource, WorkloadTabId } from '../../shared/types'
+import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
 import PodsTable from './pods/PodsTable'
 import DeploymentsTable from './deployments/DeploymentsTable'
@@ -28,6 +29,8 @@ export default function WorkloadsView({
   onPodActivate,
   onDeploymentActivate,
 }: Props) {
+  const [search, handleSearchChange] = useScopedSearch(`workloads:${cluster.filename}:${activeTab}`)
+
   return (
     <div className="workloads-view">
       <div className="workloads-view-header">
@@ -51,6 +54,8 @@ export default function WorkloadsView({
             showInlineDetails={false}
             externalSelectedPodKey={activePodKey}
             onPodActivate={onPodActivate}
+            search={search}
+            onSearchChange={handleSearchChange}
           />
         ) : (
           <DeploymentsTable
@@ -59,6 +64,8 @@ export default function WorkloadsView({
             workloadTab={activeTab as NonPodWorkloadTabId}
             externalSelectedDeploymentKey={activeDeploymentKey}
             onDeploymentActivate={onDeploymentActivate}
+            search={search}
+            onSearchChange={handleSearchChange}
           />
         )}
       </div>

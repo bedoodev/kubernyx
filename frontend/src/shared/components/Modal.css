@@ -8,6 +8,12 @@
   padding: 24px;
   background: rgba(8, 12, 20, 0.72);
   backdrop-filter: blur(2px);
+  animation: modal-overlay-in 0.16s ease-out;
+}
+
+@keyframes modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal-shell {
@@ -20,6 +26,19 @@
   background: #101723;
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.5);
   overflow: hidden;
+}
+
+.modal-shell.is-confirmation {
+  width: min(440px, calc(100vw - 32px));
+  border-color: rgba(122, 145, 205, 0.34);
+  background: #101725;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.56);
+  animation: modal-confirm-in 0.18s ease-out;
+}
+
+@keyframes modal-confirm-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .modal-header {
@@ -35,6 +54,54 @@
   font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.modal-confirm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 10px;
+  color: #f5ba66;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.24);
+}
+
+.modal-shell.tone-danger .modal-confirm-icon {
+  color: #ff9d9d;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(248, 113, 113, 0.24);
+}
+
+.modal-shell.is-confirmation .modal-header {
+  padding: 15px 16px;
+}
+
+.modal-shell.is-confirmation .modal-body {
+  padding: 18px 18px 0;
+}
+
+.modal-shell.is-confirmation .modal-body > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.modal-shell.is-confirmation .modal-actions {
+  margin: 20px -18px 0;
+  padding: 13px 18px;
+  border-top: 1px solid var(--border-subtle);
+  background: rgba(7, 12, 23, 0.34);
 }
 
 .modal-close-btn {
@@ -190,6 +257,27 @@
 }
 
 .btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  padding: 8px 20px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(190, 49, 58, 0.9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-danger:hover {
+  background: rgba(214, 61, 72, 0.96);
+  border-color: rgba(255, 145, 145, 0.42);
+}
+
+.btn-danger:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

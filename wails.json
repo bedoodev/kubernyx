@@ -2,6 +2,9 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "kubernyx",
   "outputfilename": "kubernyx",
+  "info": {
+    "productVersion": "0.2.1"
+  },
   "frontend:install": "npm install --include=dev",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",

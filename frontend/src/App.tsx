@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react'
 import { GetBasePath, SetBasePath, SelectDirectory } from './shared/api'
 import { WindowReloadApp } from '../wailsjs/runtime/runtime'
 import { useSidebarResize } from './shared/hooks/useSidebarResize'
-import { useClusterTabs, truncateWithEllipsis } from './shared/hooks/useClusterTabs'
+import { useClusterTabs, truncateWithEllipsis, type ClusterTabState } from './shared/hooks/useClusterTabs'
 import { useKeyboardShortcuts } from './shared/hooks/useKeyboardShortcuts'
 import { useShortcutSettings } from './shared/hooks/useShortcutSettings'
 import { useDragResize } from './shared/hooks/useDragResize'
@@ -106,6 +106,28 @@ function getNodeDetailTabId(
 
 function getPodRowKey(pod: PodResource): string {
   return `${pod.namespace}/${pod.name}`
+}
+
+function getDetailScopeForClusterTab(tab: ClusterTabState | null): string | null {
+  if (!tab) return null
+  const clusterFilename = tab.cluster.filename
+  switch (tab.section) {
+    case 'workloads': return `workloads:${clusterFilename}:${tab.workloadTab}`
+    case 'config': return `config:${clusterFilename}:${tab.configTab}`
+    case 'network': return `network:${clusterFilename}:${tab.networkTab}`
+    case 'nodes': return `nodes:${clusterFilename}`
+    default: return null
+  }
+}
+
+function getDetailTabScope(tab: PodDetailTabState): string {
+  switch (tab.kind) {
+    case 'pod': return `workloads:${tab.clusterFilename}:pods`
+    case 'deployment': return `workloads:${tab.clusterFilename}:${tab.workloadTab ?? 'deployments'}`
+    case 'config': return `config:${tab.clusterFilename}:${tab.configTab ?? 'config-maps'}`
+    case 'network': return `network:${tab.clusterFilename}:${tab.networkTab ?? 'services'}`
+    case 'node': return `nodes:${tab.clusterFilename}`
+  }
 }
 
 function getPodDetailTabDisplayName(tab: PodDetailTabState): string {
@@ -213,10 +235,20 @@ export default function App() {
   }, [])
   const detailsResize = useDragResize({ onUpdate: setDetailPanelWidth, invertDelta: true, onCollapseSnap: handleCollapseSnap, onExpandSnap: handleExpandSnap })
 
-  const activePodDetailTab = useMemo(
-    () => (activePodDetailTabId ? (podDetailTabs.find(tab => tab.id === activePodDetailTabId) ?? null) : null),
-    [activePodDetailTabId, podDetailTabs],
+  const activeDetailScope = getDetailScopeForClusterTab(clusterTabs.activeTab)
+  const scopedPodDetailTabs = useMemo(
+    () => activeDetailScope
+      ? podDetailTabs.filter(tab => getDetailTabScope(tab) === activeDetailScope)
+      : [],
+    [activeDetailScope, podDetailTabs],
   )
+  const activePodDetailTab = useMemo(() => {
+    const requestedTab = activePodDetailTabId
+      ? scopedPodDetailTabs.find(tab => tab.id === activePodDetailTabId)
+      : null
+    return requestedTab ?? scopedPodDetailTabs[scopedPodDetailTabs.length - 1] ?? null
+  }, [activePodDetailTabId, scopedPodDetailTabs])
+  const effectiveActivePodDetailTabId = activePodDetailTab?.id ?? null
   const activePodDetailPanelTab = activePodDetailTab
     ? (detailPanelTabByPodTabId[activePodDetailTab.id] ?? 'overview')
     : 'overview'
@@ -327,20 +359,20 @@ export default function App() {
       delete next[tabId]
       return next
     })
-    if (activePodDetailTabId === tabId) {
+    if (effectiveActivePodDetailTabId === tabId) {
       setDetailPanelMaximized(false)
       if (detailPanelMinimized) {
         setDetailPanelWidth(detailPanelWidthBeforeMinimize)
         setDetailPanelMinimized(false)
       }
     }
-  }, [activePodDetailTabId, detailPanelMinimized, detailPanelWidthBeforeMinimize])
+  }, [detailPanelMinimized, detailPanelWidthBeforeMinimize, effectiveActivePodDetailTabId])
 
   const handleActivatePodDetail = useCallback((cluster: ClusterInfo, pod: PodResource, options: { pin: boolean }) => {
     const tabId = getPodDetailTabId(cluster.filename, pod)
     const inheritedDetailTab = normalizeDetailPanelTab(
       'pod',
-      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+      effectiveActivePodDetailTabId ? detailPanelTabByPodTabId[effectiveActivePodDetailTabId] : undefined,
     ) as PodDetailsTabId
     setShowSettings(false)
 
@@ -362,7 +394,10 @@ export default function App() {
         return next
       }
 
-      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      const detailScope = `workloads:${cluster.filename}:pods`
+      const base = options.pin
+        ? current
+        : current.filter(tab => tab.pinned || getDetailTabScope(tab) !== detailScope)
       return [
         ...base,
         {
@@ -395,7 +430,7 @@ export default function App() {
         ? current
         : { ...current, [tabId]: inheritedDetailTab }
     ))
-  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+  }, [detailPanelTabByPodTabId, effectiveActivePodDetailTabId, podDetailTabs.length])
 
   const handleActivateDeploymentDetail = useCallback((
     cluster: ClusterInfo,
@@ -406,7 +441,7 @@ export default function App() {
     const tabId = getDeploymentDetailTabId(cluster.filename, workloadTab, deployment)
     const inheritedDetailTab = normalizeDetailPanelTab(
       'deployment',
-      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+      effectiveActivePodDetailTabId ? detailPanelTabByPodTabId[effectiveActivePodDetailTabId] : undefined,
     ) as DeploymentDetailsTabId
     setShowSettings(false)
 
@@ -428,7 +463,10 @@ export default function App() {
         return next
       }
 
-      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      const detailScope = `workloads:${cluster.filename}:${workloadTab}`
+      const base = options.pin
+        ? current
+        : current.filter(tab => tab.pinned || getDetailTabScope(tab) !== detailScope)
       return [
         ...base,
         {
@@ -461,7 +499,7 @@ export default function App() {
         ? current
         : { ...current, [tabId]: inheritedDetailTab }
     ))
-  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+  }, [detailPanelTabByPodTabId, effectiveActivePodDetailTabId, podDetailTabs.length])
 
   const handleActivateConfigDetail = useCallback((
     cluster: ClusterInfo,
@@ -472,7 +510,7 @@ export default function App() {
     const tabId = getConfigDetailTabId(cluster.filename, configTab, resource)
     const inheritedDetailTab = normalizeDetailPanelTab(
       'config',
-      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+      effectiveActivePodDetailTabId ? detailPanelTabByPodTabId[effectiveActivePodDetailTabId] : undefined,
     ) as ConfigDetailsTabId
     setShowSettings(false)
 
@@ -494,7 +532,10 @@ export default function App() {
         return next
       }
 
-      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      const detailScope = `config:${cluster.filename}:${configTab}`
+      const base = options.pin
+        ? current
+        : current.filter(tab => tab.pinned || getDetailTabScope(tab) !== detailScope)
       return [
         ...base,
         {
@@ -527,7 +568,7 @@ export default function App() {
         ? current
         : { ...current, [tabId]: inheritedDetailTab }
     ))
-  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+  }, [detailPanelTabByPodTabId, effectiveActivePodDetailTabId, podDetailTabs.length])
 
   const handleActivateNetworkDetail = useCallback((
     cluster: ClusterInfo,
@@ -538,7 +579,7 @@ export default function App() {
     const tabId = getNetworkDetailTabId(cluster.filename, networkTab, resource)
     const inheritedDetailTab = normalizeDetailPanelTab(
       'network',
-      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+      effectiveActivePodDetailTabId ? detailPanelTabByPodTabId[effectiveActivePodDetailTabId] : undefined,
     ) as DeploymentDetailsTabId
     setShowSettings(false)
 
@@ -562,7 +603,10 @@ export default function App() {
         return next
       }
 
-      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      const detailScope = `network:${cluster.filename}:${networkTab}`
+      const base = options.pin
+        ? current
+        : current.filter(tab => tab.pinned || getDetailTabScope(tab) !== detailScope)
       return [
         ...base,
         {
@@ -597,7 +641,7 @@ export default function App() {
         ? current
         : { ...current, [tabId]: inheritedDetailTab }
     ))
-  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+  }, [detailPanelTabByPodTabId, effectiveActivePodDetailTabId, podDetailTabs.length])
 
   const handleActivateNodeDetail = useCallback((
     cluster: ClusterInfo,
@@ -607,7 +651,7 @@ export default function App() {
     const tabId = getNodeDetailTabId(cluster.filename, node)
     const inheritedDetailTab = normalizeDetailPanelTab(
       'node',
-      activePodDetailTabId ? detailPanelTabByPodTabId[activePodDetailTabId] : undefined,
+      effectiveActivePodDetailTabId ? detailPanelTabByPodTabId[effectiveActivePodDetailTabId] : undefined,
     ) as ConfigDetailsTabId
     setShowSettings(false)
 
@@ -631,7 +675,10 @@ export default function App() {
         return next
       }
 
-      const base = options.pin ? current : current.filter(tab => tab.pinned)
+      const detailScope = `nodes:${cluster.filename}`
+      const base = options.pin
+        ? current
+        : current.filter(tab => tab.pinned || getDetailTabScope(tab) !== detailScope)
       return [
         ...base,
         {
@@ -666,16 +713,16 @@ export default function App() {
         ? current
         : { ...current, [tabId]: inheritedDetailTab }
     ))
-  }, [activePodDetailTabId, detailPanelTabByPodTabId, podDetailTabs.length])
+  }, [detailPanelTabByPodTabId, effectiveActivePodDetailTabId, podDetailTabs.length])
 
   const handlePodDetailPanelTabChange = useCallback((tab: DetailPanelTabId) => {
-    if (!activePodDetailTabId) {
+    if (!effectiveActivePodDetailTabId) {
       return
     }
-    setDetailPanelTabByPodTabId(current => ({ ...current, [activePodDetailTabId]: tab }))
+    setDetailPanelTabByPodTabId(current => ({ ...current, [effectiveActivePodDetailTabId]: tab }))
     if (shouldAutoPinFromDetailInteraction(tab)) {
       setPodDetailTabs(current => {
-        const index = current.findIndex(item => item.id === activePodDetailTabId)
+        const index = current.findIndex(item => item.id === effectiveActivePodDetailTabId)
         if (index < 0 || current[index].pinned) {
           return current
         }
@@ -684,7 +731,7 @@ export default function App() {
         return next
       })
     }
-  }, [activePodDetailTabId])
+  }, [effectiveActivePodDetailTabId])
 
   const handleToggleDetailMinimize = useCallback(() => {
     if (detailPanelMinimized) {
@@ -748,15 +795,15 @@ export default function App() {
   }, [handleCloseTerminalTab, resolvedActiveTerminalTabId])
 
   const handleEscapeNav = useCallback(() => {
-    if (activePodDetailTabId) {
-      handleClosePodDetailTab(activePodDetailTabId)
+    if (effectiveActivePodDetailTabId) {
+      handleClosePodDetailTab(effectiveActivePodDetailTabId)
       const podsTableWrap = document.querySelector('.pods-table-wrap') as HTMLElement | null
       podsTableWrap?.focus()
       return
     }
     const clusterList = sidebarRef.current?.querySelector('.cluster-list') as HTMLElement | null
     clusterList?.focus()
-  }, [activePodDetailTabId, handleClosePodDetailTab])
+  }, [effectiveActivePodDetailTabId, handleClosePodDetailTab])
 
   const isTerminalFocused = useCallback(() => {
     const activeElement = document.activeElement
@@ -811,7 +858,7 @@ export default function App() {
     enabled: view === 'main',
     shortcuts,
     showSettings,
-    activeTabId: activePodDetailTabId,
+    activeTabId: effectiveActivePodDetailTabId,
     hasDetailPanel: Boolean(activePodDetailTab),
     hasTerminalPanel: terminalPanelTabs.length > 0,
     onCloseSettings: () => setShowSettings(false),
@@ -1098,15 +1145,15 @@ export default function App() {
         </>
       )}
       <main className="main-panel">
-        {podDetailTabs.length > 0 && (
+        {scopedPodDetailTabs.length > 0 && (
           <div className="cluster-tabs">
-            {podDetailTabs.map(tab => {
+            {scopedPodDetailTabs.map(tab => {
               const fullTabName = getPodDetailTabDisplayName(tab)
               const tabName = truncateWithEllipsis(fullTabName, TAB_NAME_MAX_LENGTH)
               return (
                 <div
                   key={tab.id}
-                  className={`cluster-tab ${activePodDetailTabId === tab.id ? 'active' : ''}`}
+                  className={`cluster-tab ${effectiveActivePodDetailTabId === tab.id ? 'active' : ''}`}
                   onClick={() => setActivePodDetailTabId(tab.id)}
                   title={fullTabName}
                 >

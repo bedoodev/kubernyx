@@ -312,7 +312,7 @@ export default function NetworkDetailPanel({
         )}
       </div>
       {deleteConfirmOpen && (
-        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Confirm Delete ${resourceLabel}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>
             Delete {resourceLabel.toLowerCase()} <strong>{selectedResource.name}</strong> in
             {' '}
@@ -324,7 +324,7 @@ export default function NetworkDetailPanel({
             <button type="button" className="btn-secondary" onClick={() => setDeleteConfirmOpen(false)}>
               Cancel
             </button>
-            <button type="button" className="btn-primary" onClick={handleDelete} disabled={deletePending}>
+            <button type="button" className="btn-danger" onClick={handleDelete} disabled={deletePending}>
               {deletePending ? 'Deleting...' : 'Delete'}
             </button>
           </div>

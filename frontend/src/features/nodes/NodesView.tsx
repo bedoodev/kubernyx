@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { ClusterInfo, NodeResource } from '../../shared/types'
+import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import { formatAgeFromUnix } from '../../shared/utils/formatting'
 import { useNodeResources } from './hooks/useNodeResources'
 import '../workloads/pods/PodsTable.css'
@@ -37,7 +38,7 @@ function clamp(value: number, min: number, max: number): number {
 
 export default function NodesView({ cluster, activeNodeKey, onNodeActivate }: Props) {
   const { items, loading, error } = useNodeResources(cluster.filename)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useScopedSearch(`nodes:${cluster.filename}`)
   const [pageSize, setPageSize] = useState<number>(20)
   const [page, setPage] = useState<number>(1)
   const [sortKey, setSortKey] = useState<ColumnKey>('name')
@@ -121,6 +122,10 @@ export default function NodesView({ cluster, activeNodeKey, onNodeActivate }: Pr
                   placeholder="Search nodes..."
                   value={search}
                   onChange={event => setSearch(event.target.value)}
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoComplete="off"
                 />
               </div>
 

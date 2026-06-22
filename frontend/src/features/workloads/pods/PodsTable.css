@@ -242,6 +242,70 @@
   color: rgba(219, 228, 255, 0.72);
 }
 
+.deployment-quick-scale {
+  position: absolute;
+  right: 18px;
+  bottom: 68px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(126, 151, 217, 0.28);
+  border-radius: 15px;
+  background: rgba(13, 21, 39, 0.96);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(108, 140, 255, 0.05);
+  backdrop-filter: blur(10px);
+  animation: pods-slide-in 0.16s ease-out;
+}
+
+.deployment-quick-scale-count {
+  padding: 0 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.deployment-quick-scale-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(130, 151, 206, 0.24);
+  border-radius: 10px;
+  color: #dbe4ff;
+  background: rgba(108, 140, 255, 0.08);
+  transition: transform 0.14s ease, color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+
+.deployment-quick-scale-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  color: #fff;
+  background: rgba(108, 140, 255, 0.16);
+  border-color: rgba(145, 166, 226, 0.42);
+}
+
+.deployment-quick-scale-btn.primary {
+  color: #fff;
+  background: rgba(92, 124, 228, 0.82);
+  border-color: rgba(145, 166, 255, 0.52);
+}
+
+.deployment-quick-scale-btn.primary:hover:not(:disabled) {
+  background: rgba(108, 140, 255, 0.96);
+}
+
+.deployment-quick-scale-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.deployment-scale-confirm-copy {
+  max-width: 54ch;
+}
+
 .pods-status-trigger-value {
   min-width: 0;
   overflow: hidden;

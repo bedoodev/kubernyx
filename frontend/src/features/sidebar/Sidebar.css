@@ -232,6 +232,30 @@
   color: var(--accent);
 }
 
+.cluster-nav-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sidebar-nav-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  opacity: 0.78;
+  transition: opacity 0.12s ease;
+}
+
+.cluster-sub-item:hover .sidebar-nav-icon,
+.cluster-sub-item.active .sidebar-nav-icon,
+.cluster-workload-item:hover .sidebar-nav-icon,
+.cluster-workload-item.active .sidebar-nav-icon,
+.cluster-config-item:hover .sidebar-nav-icon,
+.cluster-config-item.active .sidebar-nav-icon {
+  opacity: 1;
+}
+
 .cluster-sub-toggle {
   margin-bottom: 2px;
 }
@@ -267,6 +291,8 @@
 
 .cluster-workload-item,
 .cluster-config-item {
+  display: flex;
+  align-items: center;
   width: 100%;
   padding: 10px 12px;
   border: 1px solid transparent;

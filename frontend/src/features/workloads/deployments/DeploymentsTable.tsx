@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import type { BatchDeleteResult, DeploymentResource } from '../../../shared/types'
-import { DeleteResourcesBatch } from '../../../shared/api'
+import { DeleteResourcesBatch, ScaleDeployment } from '../../../shared/api'
 import Modal from '../../../shared/components/Modal'
 import { formatAgeFromUnix, parsePhase } from '../../../shared/utils/formatting'
 import { toBatchDeleteResult } from '../../../shared/utils/normalization'
@@ -17,6 +17,8 @@ interface Props {
   workloadTab?: NonPodWorkloadTabId
   externalSelectedDeploymentKey?: string | null
   onDeploymentActivate?: (deployment: DeploymentResource, options: { pin: boolean }) => void
+  search: string
+  onSearchChange: (value: string) => void
 }
 
 const STATUS_ALL = 'all'
@@ -123,6 +125,20 @@ const DEFAULT_WORKLOAD_COLUMNS: DeploymentColumnKey[] = [
 ]
 
 type ColumnWidthState = Record<DeploymentColumnKey, number>
+type ScaleDirection = -1 | 1
+
+interface BulkScaleFailure {
+  namespace: string
+  name: string
+  error: string
+}
+
+interface BulkScaleResult {
+  attempted: number
+  succeeded: number
+  direction: ScaleDirection
+  failed: BulkScaleFailure[]
+}
 
 function buildInitialColumnWidths(): ColumnWidthState {
   return DEPLOYMENT_COLUMNS.reduce((acc, column) => {
@@ -164,6 +180,8 @@ export default function DeploymentsTable({
   workloadTab = 'deployments',
   externalSelectedDeploymentKey = null,
   onDeploymentActivate,
+  search,
+  onSearchChange,
 }: Props) {
   const { items, loading, error } = useDeployments(clusterFilename, selectedNamespaces, workloadTab)
   const pluralLabel = workloadPluralLabel(workloadTab)
@@ -192,7 +210,6 @@ export default function DeploymentsTable({
     [visibleColumnKeys, columnByKey],
   )
 
-  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(STATUS_ALL)
   const [statusFilterOpen, setStatusFilterOpen] = useState(false)
   const [pageSize, setPageSize] = useState<number>(20)
@@ -208,6 +225,9 @@ export default function DeploymentsTable({
   const [deletePending, setDeletePending] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleteResult, setDeleteResult] = useState<BatchDeleteResult | null>(null)
+  const [scaleDirection, setScaleDirection] = useState<ScaleDirection | null>(null)
+  const [scalePending, setScalePending] = useState(false)
+  const [scaleResult, setScaleResult] = useState<BulkScaleResult | null>(null)
 
   const tableWrapRef = useRef<HTMLDivElement | null>(null)
   const tableBodyRef = useRef<HTMLTableSectionElement | null>(null)
@@ -448,6 +468,12 @@ export default function DeploymentsTable({
   }, [clusterFilename, search, selectedNamespaces, statusFilter, workloadTab])
 
   useEffect(() => {
+    if (workloadTab !== 'deployments' || selectedKeys.length === 0) {
+      setScaleDirection(null)
+    }
+  }, [selectedKeys.length, workloadTab])
+
+  useEffect(() => {
     const validKeys = new Set(items.map(getDeploymentKey))
     setSelectedKeys(current => current.filter(key => validKeys.has(key)))
   }, [items])
@@ -461,6 +487,8 @@ export default function DeploymentsTable({
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every(key => selectedKeys.includes(key))
   const selectedResources = sortedItems.filter(item => selectedKeys.includes(getDeploymentKey(item)))
   const resourceLabel = workloadSingularLabel(workloadTab)
+  const quickScaleEnabled = workloadTab === 'deployments' && selectedCount > 0
+  const canScaleDown = selectedResources.some(resource => resource.replicas > 0)
 
   const toggleRowSelection = (key: string) => {
     setSelectedKeys(current => (
@@ -514,6 +542,41 @@ export default function DeploymentsTable({
     }
   }
 
+  const handleScaleSelected = async () => {
+    if (!scaleDirection || !quickScaleEnabled || scalePending) {
+      return
+    }
+
+    const direction = scaleDirection
+    const resources = [...selectedResources]
+    setScalePending(true)
+    const results = await Promise.allSettled(resources.map(async resource => {
+      const targetReplicas = Math.max(0, resource.replicas + direction)
+      await ScaleDeployment(clusterFilename, resource.namespace, resource.name, targetReplicas)
+    }))
+
+    const failed = results.flatMap((result, index) => {
+      if (result.status === 'fulfilled') {
+        return []
+      }
+      const resource = resources[index]
+      return [{
+        namespace: resource.namespace,
+        name: resource.name,
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      }]
+    })
+
+    setScaleResult({
+      attempted: resources.length,
+      succeeded: resources.length - failed.length,
+      direction,
+      failed,
+    })
+    setScaleDirection(null)
+    setScalePending(false)
+  }
+
   return (
     <div className={`pods-table-root ${(columnResize.isResizing) ? 'resizing' : ''}`}>
       <div className="pods-content">
@@ -543,7 +606,11 @@ export default function DeploymentsTable({
               className="pods-search"
               placeholder="Search by name, namespace, pods or status"
               value={search}
-              onChange={event => setSearch(event.target.value)}
+              onChange={event => onSearchChange(event.target.value)}
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="off"
             />
             <div className={`pods-status-select ${statusFilterOpen ? 'open' : ''}`} ref={statusFilterRef}>
               <button
@@ -792,8 +859,84 @@ export default function DeploymentsTable({
         </div>
       </div>
 
+      {quickScaleEnabled && (
+        <div className="deployment-quick-scale" aria-label={`Quick scale ${selectedCount} selected deployments`}>
+          <span className="deployment-quick-scale-count">{selectedCount} selected</span>
+          <button
+            type="button"
+            className="deployment-quick-scale-btn"
+            onClick={() => setScaleDirection(-1)}
+            disabled={!canScaleDown || scalePending}
+            aria-label={`Scale down ${selectedCount} selected deployments`}
+            title="Scale selected deployments down by 1"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="deployment-quick-scale-btn primary"
+            onClick={() => setScaleDirection(1)}
+            disabled={scalePending}
+            aria-label={`Scale up ${selectedCount} selected deployments`}
+            title="Scale selected deployments up by 1"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {scaleDirection && (
+        <Modal
+          title={`Scale ${selectedCount} Deployment${selectedCount === 1 ? '' : 's'}`}
+          onClose={() => {
+            if (!scalePending) setScaleDirection(null)
+          }}
+          variant="confirmation"
+          tone="warning"
+        >
+          <p className="deployment-scale-confirm-copy">
+            {scaleDirection === 1
+              ? `${selectedCount} selected deployment${selectedCount === 1 ? '' : 's'} will each be scaled up by 1 replica. Do you want to continue?`
+              : `${selectedCount} selected deployment${selectedCount === 1 ? '' : 's'} will each be scaled down by up to 1 replica (minimum 0). Do you want to continue?`}
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={() => setScaleDirection(null)} disabled={scalePending}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={() => void handleScaleSelected()} disabled={scalePending}>
+              {scalePending ? 'Scaling...' : scaleDirection === 1 ? 'Scale Up' : 'Scale Down'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {scaleResult && (
+        <Modal title="Bulk Scale Result" onClose={() => setScaleResult(null)} className="deployment-scale-confirm-modal">
+          <p>
+            Successfully scaled {scaleResult.succeeded} of {scaleResult.attempted} selected deployment{scaleResult.attempted === 1 ? '' : 's'} {scaleResult.direction === 1 ? 'up' : 'down'}.
+          </p>
+          {scaleResult.failed.length > 0 && (
+            <div className="pods-bulk-result">
+              {scaleResult.failed.map(item => (
+                <div key={`${item.namespace}/${item.name}`} className="pods-bulk-result-item">
+                  <strong>{item.namespace}/{item.name}</strong>
+                  <span>{item.error}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn-primary" onClick={() => setScaleResult(null)}>Done</button>
+          </div>
+        </Modal>
+      )}
+
       {deleteConfirmOpen && (
-        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)}>
+        <Modal title={`Delete ${selectedCount} ${resourceLabel}${selectedCount === 1 ? '' : 's'}`} onClose={() => setDeleteConfirmOpen(false)} variant="confirmation" tone="danger">
           <p>Delete {selectedCount} selected {resourceLabel.toLowerCase()}{selectedCount === 1 ? '' : 's'}?</p>
           {deleteError && (
             <div className="pods-detail-alert error">{deleteError}</div>

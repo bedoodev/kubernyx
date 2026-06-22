@@ -1,4 +1,5 @@
 import type { ClusterInfo, DeploymentResource, NetworkTabId } from '../../shared/types'
+import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import NamespaceFilter from '../namespace-filter/NamespaceFilter'
 import NetworkTable from './NetworkTable'
 import '../config/ConfigView.css'
@@ -22,6 +23,8 @@ export default function NetworkView({
   activeNetworkKey,
   onNetworkActivate,
 }: Props) {
+  const [search, setSearch] = useScopedSearch(`network:${cluster.filename}:${activeTab}`)
+
   return (
     <div className="config-view">
       <div className="config-view-header">
@@ -44,6 +47,8 @@ export default function NetworkView({
           networkTab={activeTab}
           externalSelectedKey={activeNetworkKey}
           onResourceActivate={onNetworkActivate}
+          search={search}
+          onSearchChange={setSearch}
         />
       </div>
     </div>

@@ -86,6 +86,10 @@ export default function NamespaceFilter({
                 placeholder="Search namespaces..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoComplete="off"
                 autoFocus
               />
               <div className="ns-options">
