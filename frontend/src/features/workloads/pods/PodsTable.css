@@ -1019,6 +1019,22 @@
   min-width: 0;
 }
 
+.pods-detail-card,
+.pods-detail-card *,
+.pod-detail-panel,
+.pod-detail-panel * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.pods-detail-card button,
+.pods-detail-card [role='button'],
+.pod-detail-panel button,
+.pod-detail-panel [role='button'] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* ─── Detail Header ─── */
 
 .pods-detail-header {
