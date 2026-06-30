@@ -38,8 +38,23 @@ export NO_COLOR=1
 export CLICOLOR=0
 export CLICOLOR_FORCE=0
 export LS_COLORS=
-export PS1='# '
-unset PROMPT_COMMAND
+__kubernyx_prompt() {
+  PS1="${PWD:-$(pwd)} # "
+}
+__kubernyx_prompt
+if [ -n "${BASH_VERSION:-}" ]; then
+  PROMPT_COMMAND=__kubernyx_prompt
+else
+  unset PROMPT_COMMAND
+fi
+cd() {
+  command cd "$@"
+  code=$?
+  if [ "$code" -eq 0 ]; then
+    __kubernyx_prompt
+  fi
+  return "$code"
+}
 ls() {
   command ls --color=never "$@" 2>/dev/null
   code=$?
@@ -60,6 +75,10 @@ func buildTerminalEnv(kubeconfigPath string) []string {
 		"TERM=xterm-256color",
 		fmt.Sprintf("PATH=%s", buildTerminalPath()),
 	)
+}
+
+func BuildEnv(kubeconfigPath string) []string {
+	return buildTerminalEnv(kubeconfigPath)
 }
 
 func buildTerminalPath() string {
@@ -103,6 +122,10 @@ func resolveExecutable(name string) string {
 		return resolved
 	}
 	return name
+}
+
+func ResolveExecutable(name string) string {
+	return resolveExecutable(name)
 }
 
 func findExecutableInPath(name string, searchPath string) (string, bool) {

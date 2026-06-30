@@ -48,24 +48,33 @@ export default function NodeDetailPanel({
   const [metadataOpenSections, setMetadataOpenSections] = useState<{
     labels: boolean
     annotations: boolean
+    taints: boolean
   }>({
     labels: true,
     annotations: true,
+    taints: true,
   })
 
   useEffect(() => {
     setMetadataOpenSections({
       labels: true,
       annotations: true,
+      taints: true,
     })
   }, [selectedNode.name])
 
   const labels = useMemo(() => mapEntries(nodeDetail?.labels ?? {}), [nodeDetail?.labels])
   const annotations = useMemo(() => mapEntries(nodeDetail?.annotations ?? {}), [nodeDetail?.annotations])
+  const taints = useMemo(() => (
+    (nodeDetail?.taints ?? []).map(taint => [
+      taint.key || '-',
+      `${taint.value || '-'} (${taint.effect || '-'})`,
+    ] as [string, string])
+  ), [nodeDetail?.taints])
 
   const statusClass = nodeDetail?.status === 'Ready' ? 'running' : nodeDetail?.status === 'NotReady' ? 'failed' : 'pending'
 
-  const toggleMetadataSection = (section: 'labels' | 'annotations') => {
+  const toggleMetadataSection = (section: 'labels' | 'annotations' | 'taints') => {
     setMetadataOpenSections(current => ({
       ...current,
       [section]: !current[section],
@@ -225,32 +234,6 @@ export default function NodeDetailPanel({
               </section>
             )}
 
-            {nodeDetail?.taints && nodeDetail.taints.length > 0 && (
-              <section className="pod-detail-section">
-                <h4 className="pod-detail-section-title">Taints</h4>
-                <div className="pods-table-wrap" style={{ maxHeight: '180px' }}>
-                  <table className="pods-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr>
-                        <th><div className="pods-th-content"><span className="pods-th-label">Key</span></div></th>
-                        <th><div className="pods-th-content"><span className="pods-th-label">Value</span></div></th>
-                        <th><div className="pods-th-content"><span className="pods-th-label">Effect</span></div></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {nodeDetail.taints.map((taint, i) => (
-                        <tr key={`${taint.key}-${i}`}>
-                          <td className="pods-cell mono">{taint.key}</td>
-                          <td className="pods-cell mono">{taint.value || '-'}</td>
-                          <td className="pods-cell">{taint.effect}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
             <section className="pods-meta-card">
               <header className="pods-meta-card-header">
                 <button
@@ -305,6 +288,36 @@ export default function NodeDetailPanel({
                     <div key={key} className="pods-meta-item">
                       <span className="pods-meta-key">{key}:</span>
                       <span className="pods-meta-text-value">{value || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="pods-meta-card">
+              <header className="pods-meta-card-header">
+                <button
+                  type="button"
+                  className={`pods-meta-header-btn ${metadataOpenSections.taints ? 'is-open' : ''}`}
+                  onClick={() => toggleMetadataSection('taints')}
+                  aria-label={metadataOpenSections.taints ? 'Collapse taints' : 'Expand taints'}
+                  aria-expanded={metadataOpenSections.taints}
+                >
+                  <div className="pods-meta-title">
+                    <span className="pods-meta-chevron">▾</span>
+                    <span>Taints</span>
+                  </div>
+                  <span className="pods-meta-count">{taints.length}</span>
+                </button>
+              </header>
+              {!metadataOpenSections.taints ? null : taints.length === 0 ? (
+                <p className="pods-meta-empty">No taints</p>
+              ) : (
+                <div className="pods-meta-list">
+                  {taints.map(([key, value], index) => (
+                    <div key={`${key}-${value}-${index}`} className="pods-meta-item">
+                      <span className="pods-meta-key">{key}:</span>
+                      <span className="pods-meta-text-value">{value}</span>
                     </div>
                   ))}
                 </div>

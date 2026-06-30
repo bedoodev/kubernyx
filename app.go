@@ -33,6 +33,8 @@ type App struct {
 	terminalStartMu     sync.Mutex
 	terminalStarts      map[string]context.CancelFunc
 	nodeDebugPods       map[string]struct{}
+	portForwardMu       sync.Mutex
+	portForwards        map[string]*portForwardProcess
 }
 
 func NewApp() *App {
@@ -43,6 +45,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.terminalStarts = make(map[string]context.CancelFunc)
 	a.nodeDebugPods = make(map[string]struct{})
+	a.portForwards = make(map[string]*portForwardProcess)
 	a.terminalManager = terminal.NewManager(terminal.EventHandlers{
 		OnData: func(event terminal.DataEvent) {
 			runtime.EventsEmit(a.ctx, "terminal-data", event)
@@ -64,6 +67,7 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(_ context.Context) {
 	a.StopPodsStream()
 	a.StopPodLogsStream()
+	a.stopAllPortForwards()
 	if a.terminalManager != nil {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		a.terminalManager.CloseAll(closeCtx)

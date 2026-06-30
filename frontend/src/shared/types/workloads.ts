@@ -1,6 +1,7 @@
 export type WorkloadTabId =
   | 'pods'
   | 'deployments'
+  | 'replica-sets'
   | 'daemon-sets'
   | 'stateful-sets'
   | 'jobs'
@@ -14,6 +15,7 @@ export interface WorkloadTabOption {
 export const WORKLOAD_TAB_OPTIONS: WorkloadTabOption[] = [
   { id: 'pods', label: 'Pods' },
   { id: 'deployments', label: 'Deployments' },
+  { id: 'replica-sets', label: 'Replica Sets' },
   { id: 'daemon-sets', label: 'Daemon Sets' },
   { id: 'stateful-sets', label: 'Stateful Sets' },
   { id: 'jobs', label: 'Jobs' },

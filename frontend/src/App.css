@@ -79,6 +79,10 @@
   padding-left: 52px;
 }
 
+.app-layout.sidebar-collapsed .main-panel.no-detail-tabs .main-content {
+  padding-left: 52px;
+}
+
 .sidebar-collapsed-toggle {
   position: absolute;
   top: 10px;

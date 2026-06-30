@@ -16,6 +16,8 @@ interface Props {
   activeDeploymentKey: string | null
   onPodActivate: (pod: PodResource, options: { pin: boolean }) => void
   onDeploymentActivate: (deployment: DeploymentResource, options: { pin: boolean }) => void
+  onActivePodMissing: () => void
+  onActiveDeploymentMissing: () => void
 }
 
 export default function WorkloadsView({
@@ -28,6 +30,8 @@ export default function WorkloadsView({
   activeDeploymentKey,
   onPodActivate,
   onDeploymentActivate,
+  onActivePodMissing,
+  onActiveDeploymentMissing,
 }: Props) {
   const [search, handleSearchChange] = useScopedSearch(`workloads:${cluster.filename}:${activeTab}`)
 
@@ -54,6 +58,7 @@ export default function WorkloadsView({
             showInlineDetails={false}
             externalSelectedPodKey={activePodKey}
             onPodActivate={onPodActivate}
+            onActivePodMissing={onActivePodMissing}
             search={search}
             onSearchChange={handleSearchChange}
           />
@@ -64,6 +69,7 @@ export default function WorkloadsView({
             workloadTab={activeTab as NonPodWorkloadTabId}
             externalSelectedDeploymentKey={activeDeploymentKey}
             onDeploymentActivate={onDeploymentActivate}
+            onActiveDeploymentMissing={onActiveDeploymentMissing}
             search={search}
             onSearchChange={handleSearchChange}
           />

@@ -5,6 +5,7 @@ import type {
   WorkloadStatuses,
   PodsStreamEvent,
   PodLogsStreamEvent,
+  PortForwardSession,
   PodResource,
   PodDetail,
   PodLogLine,
@@ -358,6 +359,23 @@ export function toPodLogLines(data: unknown): PodLogLine[] {
       message: String(record.message ?? ''),
     }
   })
+}
+
+export function toPortForwardSession(data: unknown): PortForwardSession {
+  const record = unwrapEventRecord(data)
+  return {
+    id: String(record.id ?? ''),
+    clusterFilename: String(record.clusterFilename ?? ''),
+    namespace: String(record.namespace ?? ''),
+    resourceKind: String(record.resourceKind ?? ''),
+    resourceName: String(record.resourceName ?? ''),
+    localPort: Number(record.localPort ?? 0),
+    remotePort: Number(record.remotePort ?? 0),
+    command: String(record.command ?? ''),
+    status: String(record.status ?? ''),
+    message: String(record.message ?? ''),
+    startedAtUnix: Number(record.startedAtUnix ?? 0),
+  }
 }
 
 export function toPodExecResult(data: unknown): PodExecResult {

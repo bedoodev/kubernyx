@@ -1014,6 +1014,65 @@ export namespace kube {
 
 }
 
+export namespace main {
+	
+	export class PortForwardRequest {
+	    clusterFilename: string;
+	    namespace: string;
+	    resourceKind: string;
+	    resourceName: string;
+	    localPort: number;
+	    remotePort: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortForwardRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.clusterFilename = source["clusterFilename"];
+	        this.namespace = source["namespace"];
+	        this.resourceKind = source["resourceKind"];
+	        this.resourceName = source["resourceName"];
+	        this.localPort = source["localPort"];
+	        this.remotePort = source["remotePort"];
+	    }
+	}
+	export class PortForwardSession {
+	    id: string;
+	    clusterFilename: string;
+	    namespace: string;
+	    resourceKind: string;
+	    resourceName: string;
+	    localPort: number;
+	    remotePort: number;
+	    command: string;
+	    status: string;
+	    message: string;
+	    startedAtUnix: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortForwardSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.clusterFilename = source["clusterFilename"];
+	        this.namespace = source["namespace"];
+	        this.resourceKind = source["resourceKind"];
+	        this.resourceName = source["resourceName"];
+	        this.localPort = source["localPort"];
+	        this.remotePort = source["remotePort"];
+	        this.command = source["command"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.startedAtUnix = source["startedAtUnix"];
+	    }
+	}
+
+}
+
 export namespace terminal {
 	
 	export class Target {

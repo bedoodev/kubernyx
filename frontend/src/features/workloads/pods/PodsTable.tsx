@@ -10,6 +10,8 @@ import { usePodsStream } from './hooks/usePodsStream'
 import { usePodDetail } from './hooks/usePodDetail'
 import { usePodLogs } from './hooks/usePodLogs'
 import PodDetailPanel, { type PodDetailsTabId } from './components/PodDetailPanel'
+import SearchHelpButton from '../shared/SearchHelpButton'
+import { createWorkloadSearchMatcher } from '../shared/workloadSearch'
 import './PodsTable.css'
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
   showInlineDetails?: boolean
   externalSelectedPodKey?: string | null
   onPodActivate?: (pod: PodResource, options: { pin: boolean }) => void
+  onActivePodMissing?: () => void
   search: string
   onSearchChange: (value: string) => void
 }
@@ -87,6 +90,7 @@ export default function PodsTable({
   showInlineDetails = true,
   externalSelectedPodKey = null,
   onPodActivate,
+  onActivePodMissing,
   search,
   onSearchChange,
 }: Props) {
@@ -193,6 +197,16 @@ export default function PodsTable({
   }, [selectedPod, selectedPodKey])
 
   useEffect(() => {
+    if (!externalSelectedPodKey || loading || error || selectedNamespaces.length === 0) {
+      return
+    }
+    if (items.some(item => getPodKey(item) === externalSelectedPodKey)) {
+      return
+    }
+    onActivePodMissing?.()
+  }, [error, externalSelectedPodKey, items, loading, onActivePodMissing, selectedNamespaces.length])
+
+  useEffect(() => {
     if (!selectedPod) {
       return
     }
@@ -226,37 +240,17 @@ export default function PodsTable({
     return [STATUS_ALL, ...Array.from(set).sort()]
   }, [items])
 
+  const searchMatcher = useMemo(() => createWorkloadSearchMatcher(search), [search])
+
   const filteredItems = useMemo(() => {
-    const query = search.trim().toLowerCase()
     return items.filter(item => {
       const status = normalizeStatus(item.status)
       if (statusFilter !== STATUS_ALL && status !== statusFilter) {
         return false
       }
-      if (!query) {
-        return true
-      }
-      if (
-        item.name.toLowerCase().includes(query)
-        || item.namespace.toLowerCase().includes(query)
-        || item.controlledBy.toLowerCase().includes(query)
-        || item.status.toLowerCase().includes(query)
-      ) {
-        return true
-      }
-      if (item.labels) {
-        for (const [k, v] of Object.entries(item.labels)) {
-          if (k.toLowerCase().includes(query) || v.toLowerCase().includes(query)) return true
-        }
-      }
-      if (item.annotations) {
-        for (const [k, v] of Object.entries(item.annotations)) {
-          if (k.toLowerCase().includes(query) || v.toLowerCase().includes(query)) return true
-        }
-      }
-      return false
+      return searchMatcher(item)
     })
-  }, [items, search, statusFilter])
+  }, [items, searchMatcher, statusFilter])
 
   const handleSort = (key: PodColumnKey) => {
     if (sortKey === key) {
@@ -492,16 +486,19 @@ export default function PodsTable({
                 </div>
               )}
             </div>
-            <input
-              className="pods-search"
-              placeholder="Search by name, namespace, owner, status, annotations or labels"
-              value={search}
-              onChange={event => onSearchChange(event.target.value)}
-              autoCorrect="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              autoComplete="off"
-            />
+            <div className="pods-search-wrap">
+              <input
+                className="pods-search"
+                placeholder="Search names or label='app:backend' && pod-name"
+                value={search}
+                onChange={event => onSearchChange(event.target.value)}
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <SearchHelpButton entityLabel="pod" />
+            </div>
             <div className={`pods-status-select ${statusFilterOpen ? 'open' : ''}`} ref={statusFilterRef}>
               <button
                 type="button"

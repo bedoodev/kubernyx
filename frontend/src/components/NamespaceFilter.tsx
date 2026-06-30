@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import './NamespaceFilter.css'
 
 interface Props {
@@ -28,7 +29,13 @@ export default function NamespaceFilter({ namespaces, selected, onChange }: Prop
     return namespaces.filter(ns => ns.toLowerCase().includes(q))
   }, [namespaces, search])
 
-  const toggle = (ns: string) => {
+  const toggle = (ns: string, event: ReactMouseEvent<HTMLInputElement>) => {
+    const multiSelect = event.metaKey || event.ctrlKey || event.altKey
+    if (!multiSelect) {
+      onChange([ns])
+      return
+    }
+
     if (selected.includes(ns)) {
       onChange(selected.filter(s => s !== ns))
     } else {
@@ -78,7 +85,8 @@ export default function NamespaceFilter({ namespaces, selected, onChange }: Prop
                 <input
                   type="checkbox"
                   checked={selected.includes(ns)}
-                  onChange={() => toggle(ns)}
+                  onClick={event => toggle(ns, event)}
+                  readOnly
                 />
                 <span>{ns}</span>
               </label>

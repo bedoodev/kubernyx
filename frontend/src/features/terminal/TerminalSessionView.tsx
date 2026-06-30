@@ -48,6 +48,36 @@ function getStatusLabel(state: string): string {
   }
 }
 
+function getTargetTitle(target: TerminalTarget): string {
+  switch (target.kind) {
+    case 'pod':
+      return 'Pod shell'
+    case 'node':
+      return 'Node shell'
+    case 'cluster':
+      return 'Cluster shell'
+    default:
+      return 'Shell'
+  }
+}
+
+function getTargetChips(target: TerminalTarget): string[] {
+  const chips: string[] = []
+  if (target.namespace) {
+    chips.push(target.namespace)
+  }
+  if (target.podName) {
+    chips.push(target.podName)
+  }
+  if (target.nodeName) {
+    chips.push(target.nodeName)
+  }
+  if (target.container) {
+    chips.push(target.container)
+  }
+  return chips
+}
+
 export default function TerminalSessionView({ target, active, className = '' }: Props) {
   const targetKey = [
     target.kind,
@@ -72,6 +102,8 @@ export default function TerminalSessionView({ target, active, className = '' }: 
   const [statusState, setStatusState] = useState<string>(buildInitialState(target).state)
   const [statusMessage, setStatusMessage] = useState<string | undefined>(buildInitialState(target).message)
   const [closedInfo, setClosedInfo] = useState<{ exitCode: number; error?: string } | null>(null)
+  const targetTitle = getTargetTitle(target)
+  const targetChips = getTargetChips(target)
 
   const fitAndResizeTerminal = (options: { force?: boolean; focus?: boolean } = {}) => {
     if (fitFrameRef.current !== null) {
@@ -291,16 +323,28 @@ export default function TerminalSessionView({ target, active, className = '' }: 
 
   return (
     <div className={`terminal-session-root ${className}`.trim()}>
-      <div className={`terminal-session-status state-${statusState}`}>
-        <span className="terminal-session-status-dot" />
-        <span className="terminal-session-status-label">{getStatusLabel(statusState)}</span>
-        {statusMessage && (
-          <span className="terminal-session-status-message">{statusMessage}</span>
-        )}
-        {closedInfo && (
-          <span className="terminal-session-status-message">
-            {closedInfo.error ? closedInfo.error : `Exit code ${closedInfo.exitCode}`}
+      <div className="terminal-session-toolbar">
+        <div className="terminal-session-toolbar-main">
+          <span className={`terminal-session-status-pill state-${statusState}`}>
+            <span className="terminal-session-status-dot" />
+            <span className="terminal-session-status-label">{getStatusLabel(statusState)}</span>
           </span>
+          <strong className="terminal-session-title">{targetTitle}</strong>
+        </div>
+        {targetChips.length > 0 && (
+          <div className="terminal-session-targets" aria-label="Shell target">
+            {targetChips.map(chip => (
+              <span key={chip} className="terminal-session-target-chip">{chip}</span>
+            ))}
+          </div>
+        )}
+        {(statusMessage || closedInfo) && (
+          <div className="terminal-session-message">
+            {statusMessage}
+            {closedInfo && (
+              <span>{closedInfo.error ? closedInfo.error : `Exit code ${closedInfo.exitCode}`}</span>
+            )}
+          </div>
         )}
       </div>
       <div className="terminal-session-surface" ref={containerRef} tabIndex={-1} />

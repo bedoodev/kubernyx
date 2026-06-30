@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PodResource, PodDetail, PodDetailContainer, PodLogLine } from '../../../../shared/types'
-import { DeletePodResource, GetPodLogs, SavePodLogsFile } from '../../../../shared/api'
+import type { PodResource, PodDetail, PodDetailContainer, PodLogLine, PortForwardSession } from '../../../../shared/types'
+import {
+  DeletePodResource,
+  EventsOn,
+  GetPodLogs,
+  ListPortForwards,
+  SavePodLogsFile,
+  StartPortForward,
+  StopPortForward,
+} from '../../../../shared/api'
 import { getAgeLabel, parsePhase, toPercent } from '../../../../shared/utils/formatting'
-import { toPodLogLines } from '../../../../shared/utils/normalization'
+import { toPodLogLines, toPortForwardSession } from '../../../../shared/utils/normalization'
 import Modal from '../../../../shared/components/Modal'
 import YamlEditor from '../../../../shared/components/YamlEditor'
 import TerminalSessionView from '../../../../features/terminal/TerminalSessionView'
@@ -17,7 +25,7 @@ import {
   matchesLogLevel,
 } from '../../shared/detailHelpers'
 
-export type PodDetailsTabId = 'overview' | 'metadata' | 'init-containers' | 'containers' | 'logs' | 'shell' | 'usages' | 'manifest'
+export type PodDetailsTabId = 'overview' | 'metadata' | 'init-containers' | 'containers' | 'logs' | 'shell' | 'port-forward' | 'usages' | 'manifest'
 type MetadataSectionKey = 'labels' | 'annotations'
 type InitSectionKey = 'env' | 'mounts'
 type ContainerSectionKey = 'env' | 'ports' | 'mounts' | 'args'
@@ -30,6 +38,7 @@ const POD_DETAIL_TABS: Array<{ id: PodDetailsTabId; label: string }> = [
   { id: 'containers', label: 'Containers' },
   { id: 'logs', label: 'Logs' },
   { id: 'shell', label: 'Shell' },
+  { id: 'port-forward', label: 'Port Forward' },
   { id: 'usages', label: 'Usages' },
   { id: 'manifest', label: 'Manifest' },
 ]
@@ -94,6 +103,25 @@ function formatMemoryValue(bytes: number): string {
     return `${(bytes / kib).toFixed(1)} KiB`
   }
   return `${Math.round(bytes)} B`
+}
+
+function parsePortInput(value: string): number | null {
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) {
+    return null
+  }
+  const port = Number(trimmed)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return null
+  }
+  return port
+}
+
+function isSamePodPortForward(session: PortForwardSession, clusterFilename: string, namespace: string, podName: string): boolean {
+  return session.clusterFilename === clusterFilename
+    && session.namespace === namespace
+    && session.resourceKind === 'pod'
+    && session.resourceName === podName
 }
 
 interface Props {
@@ -173,6 +201,11 @@ export default function PodDetailPanel({
   const [initLogsErrorByKey, setInitLogsErrorByKey] = useState<Record<string, string | null>>({})
   const [shellContainerName, setShellContainerName] = useState('')
   const [shellContainerOpen, setShellContainerOpen] = useState(false)
+  const [portForwardLocalPort, setPortForwardLocalPort] = useState('')
+  const [portForwardRemotePort, setPortForwardRemotePort] = useState('')
+  const [portForwardSessions, setPortForwardSessions] = useState<PortForwardSession[]>([])
+  const [portForwardPending, setPortForwardPending] = useState(false)
+  const [portForwardError, setPortForwardError] = useState<string | null>(null)
   const containerSelectRef = useRef<HTMLDivElement | null>(null)
   const logsFilterRef = useRef<HTMLDivElement | null>(null)
   const logsLevelFilterRef = useRef<HTMLDivElement | null>(null)
@@ -210,6 +243,26 @@ export default function PodDetailPanel({
   const metadataAnnotations = Object.entries(podDetail?.annotations ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataOwnerReferences = podDetail?.ownerReferences ?? []
   const metadataVolumes = podDetail?.volumes ?? []
+  const portForwardPortOptions = useMemo(() => {
+    const seen = new Set<number>()
+    const options: Array<{ containerName: string; port: number; name: string; protocol: string }> = []
+    for (const container of overviewContainers) {
+      for (const port of container.ports) {
+        if (!Number.isFinite(port.containerPort) || port.containerPort <= 0 || seen.has(port.containerPort)) {
+          continue
+        }
+        seen.add(port.containerPort)
+        options.push({
+          containerName: container.name,
+          port: port.containerPort,
+          name: port.name,
+          protocol: port.protocol,
+        })
+      }
+    }
+    return options.sort((left, right) => left.port - right.port)
+  }, [overviewContainers])
+  const suggestedPortForwardPort = portForwardPortOptions[0]?.port ?? 0
   const metadataVolumeGroups = useMemo(() => {
     const grouped = new Map<string, typeof metadataVolumes>()
     for (const volume of metadataVolumes) {
@@ -275,6 +328,70 @@ export default function PodDetailPanel({
       setShellContainerName(overviewContainers[0].name)
     }
   }, [overviewContainers, shellContainerName])
+
+  useEffect(() => {
+    setPortForwardLocalPort('')
+    setPortForwardRemotePort('')
+    setPortForwardSessions([])
+    setPortForwardError(null)
+  }, [selectedPod.namespace, selectedPod.name])
+
+  useEffect(() => {
+    if (!suggestedPortForwardPort) {
+      return
+    }
+    const value = String(suggestedPortForwardPort)
+    setPortForwardLocalPort(current => current || value)
+    setPortForwardRemotePort(current => current || value)
+  }, [selectedPod.namespace, selectedPod.name, suggestedPortForwardPort])
+
+  useEffect(() => {
+    let active = true
+    const applySession = (session: PortForwardSession) => {
+      if (!isSamePodPortForward(session, clusterFilename, selectedPod.namespace, selectedPod.name)) {
+        return
+      }
+      setPortForwardSessions(current => {
+        if (session.status === 'stopped' || session.status === 'failed') {
+          const withoutSession = current.filter(item => item.id !== session.id)
+          return session.status === 'failed'
+            ? [session, ...withoutSession].slice(0, 8)
+            : withoutSession
+        }
+        const exists = current.some(item => item.id === session.id)
+        if (!exists) {
+          return [session, ...current]
+        }
+        return current.map(item => (item.id === session.id ? session : item))
+      })
+    }
+
+    const unsubscribe = EventsOn('port-forward-status', (payload: unknown) => {
+      if (!active) {
+        return
+      }
+      applySession(toPortForwardSession(payload))
+    })
+
+    void ListPortForwards().then(sessions => {
+      if (!active) {
+        return
+      }
+      setPortForwardSessions(sessions.filter(session => (
+        isSamePodPortForward(session, clusterFilename, selectedPod.namespace, selectedPod.name)
+      )))
+    }).catch((errorValue: unknown) => {
+      if (!active) {
+        return
+      }
+      setPortForwardError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    })
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [clusterFilename, selectedPod.namespace, selectedPod.name])
 
   useEffect(() => {
     const handleDocumentMouseDown = (event: MouseEvent) => {
@@ -546,6 +663,43 @@ export default function PodDetailPanel({
       setDeleteError(errorValue instanceof Error ? errorValue.message : String(errorValue))
     }).finally(() => {
       setDeletePending(false)
+    })
+  }
+
+  const startPortForward = () => {
+    if (portForwardPending) {
+      return
+    }
+
+    const localPort = parsePortInput(portForwardLocalPort)
+    const remotePort = parsePortInput(portForwardRemotePort)
+    if (!localPort || !remotePort) {
+      setPortForwardError('Local and remote ports must be between 1 and 65535.')
+      return
+    }
+
+    setPortForwardPending(true)
+    setPortForwardError(null)
+    void StartPortForward({
+      clusterFilename,
+      namespace: selectedPod.namespace,
+      resourceKind: 'pod',
+      resourceName: selectedPod.name,
+      localPort,
+      remotePort,
+    }).then(session => {
+      setPortForwardSessions(current => [session, ...current.filter(item => item.id !== session.id)])
+    }).catch((errorValue: unknown) => {
+      setPortForwardError(errorValue instanceof Error ? errorValue.message : String(errorValue))
+    }).finally(() => {
+      setPortForwardPending(false)
+    })
+  }
+
+  const stopPortForward = (sessionId: string) => {
+    setPortForwardError(null)
+    void StopPortForward(sessionId).catch((errorValue: unknown) => {
+      setPortForwardError(errorValue instanceof Error ? errorValue.message : String(errorValue))
     })
   }
 
@@ -1325,11 +1479,7 @@ export default function PodDetailPanel({
         <div className="pods-shell-terminal">
           <div className="pods-shell-header">
             <div className="pods-shell-header-left">
-              <div className="pods-shell-traffic-lights" aria-hidden="true">
-                <span className="pods-shell-dot red" />
-                <span className="pods-shell-dot yellow" />
-                <span className="pods-shell-dot green" />
-              </div>
+              <span className="pods-shell-target-label">Container</span>
               <div className={`pods-container-select-wrap ${shellContainerOpen ? 'open' : ''}`} ref={shellContainerRef}>
                 <button
                   type="button"
@@ -1397,6 +1547,122 @@ export default function PodDetailPanel({
       </div>
     )
   }
+
+  const renderPortForwardTab = () => (
+    <div className="pods-port-forward-tab">
+      <section className="pods-meta-card">
+        <header className="pods-meta-card-header">
+          <div className="pods-meta-header-static">
+            <div className="pods-meta-title">
+              <span>Forward Pod Port</span>
+            </div>
+          </div>
+        </header>
+
+        <div className="pods-port-forward-form">
+          <label className="pods-port-forward-field">
+            <span>Local Port</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={portForwardLocalPort}
+              onChange={event => setPortForwardLocalPort(event.target.value)}
+              placeholder="8080"
+            />
+          </label>
+          <label className="pods-port-forward-field">
+            <span>Pod Port</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={portForwardRemotePort}
+              onChange={event => setPortForwardRemotePort(event.target.value)}
+              placeholder="80"
+            />
+          </label>
+          <button
+            type="button"
+            className="pods-port-forward-start-btn"
+            onClick={startPortForward}
+            disabled={portForwardPending}
+          >
+            {portForwardPending ? 'Starting...' : 'Start'}
+          </button>
+        </div>
+
+        {portForwardPortOptions.length > 0 && (
+          <div className="pods-port-forward-presets" aria-label="Pod port presets">
+            {portForwardPortOptions.map(option => (
+              <button
+                key={`${option.containerName}-${option.port}`}
+                type="button"
+                className="pods-port-forward-preset"
+                onClick={() => {
+                  const value = String(option.port)
+                  setPortForwardLocalPort(value)
+                  setPortForwardRemotePort(value)
+                }}
+              >
+                <span>{option.port}/{option.protocol}</span>
+                <small>{option.name && option.name !== '-' ? option.name : option.containerName}</small>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <code className="pods-port-forward-command">
+          kubectl -n {selectedPod.namespace} port-forward pod/{selectedPod.name} {portForwardLocalPort || '<local>'}:{portForwardRemotePort || '<pod>'}
+        </code>
+
+        {portForwardError && (
+          <div className="pods-detail-alert error">{portForwardError}</div>
+        )}
+      </section>
+
+      <section className="pods-meta-card">
+        <header className="pods-meta-card-header">
+          <div className="pods-meta-header-static">
+            <div className="pods-meta-title">
+              <span>Active Forwards</span>
+            </div>
+            <span className="pods-meta-count">{portForwardSessions.length}</span>
+          </div>
+        </header>
+
+        {portForwardSessions.length === 0 ? (
+          <p className="pods-meta-empty">No active port forwards</p>
+        ) : (
+          <div className="pods-port-forward-list">
+            {portForwardSessions.map(session => (
+              <article key={session.id} className="pods-port-forward-item">
+                <div className="pods-port-forward-main">
+                  <strong>127.0.0.1:{session.localPort}</strong>
+                  <span>pod/{session.resourceName}:{session.remotePort}</span>
+                  <code>{session.command}</code>
+                  {session.message && <small>{session.message}</small>}
+                </div>
+                <div className="pods-port-forward-actions">
+                  <span className={`pods-tone-pill tone-${valueToneClass(session.status)}`}>{session.status}</span>
+                  {session.status !== 'failed' && (
+                    <button
+                      type="button"
+                      className="pods-port-forward-stop-btn"
+                      onClick={() => stopPortForward(session.id)}
+                      disabled={session.status === 'stopping'}
+                    >
+                      Stop
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
 
   const renderUsagesTab = () => {
     const cpuUsagePercentOfRequest = usageCPURequests > 0 ? toPercent(usageCPU, usageCPURequests) : 0
@@ -1546,7 +1812,7 @@ export default function PodDetailPanel({
         {deleteError && (
           <div className="pods-detail-alert error">{deleteError}</div>
         )}
-        {(!['overview', 'metadata', 'init-containers', 'containers', 'logs', 'shell', 'usages', 'manifest'].includes(activeDetailsTab)) ? (
+        {(!['overview', 'metadata', 'init-containers', 'containers', 'logs', 'shell', 'port-forward', 'usages', 'manifest'].includes(activeDetailsTab)) ? (
           <>
             <h5>{detailTabLabel}</h5>
             <p>Coming soon...</p>
@@ -1788,6 +2054,15 @@ export default function PodDetailPanel({
             )}
             <section className="pods-detail-section pods-detail-shell-section">
               {renderShellTab()}
+            </section>
+          </>
+        ) : activeDetailsTab === 'port-forward' ? (
+          <>
+            {podDetailLoading && !podDetail && (
+              <div className="pods-detail-alert">Loading pod ports...</div>
+            )}
+            <section className="pods-detail-section">
+              {renderPortForwardTab()}
             </section>
           </>
         ) : activeDetailsTab === 'usages' ? (

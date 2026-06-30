@@ -110,6 +110,10 @@ export function ListClusters() {
   return window['go']['main']['App']['ListClusters']();
 }
 
+export function ListPortForwards() {
+  return window['go']['main']['App']['ListPortForwards']();
+}
+
 export function RefreshOverview(arg1) {
   return window['go']['main']['App']['RefreshOverview'](arg1);
 }
@@ -158,6 +162,10 @@ export function StartPodsStream(arg1, arg2) {
   return window['go']['main']['App']['StartPodsStream'](arg1, arg2);
 }
 
+export function StartPortForward(arg1) {
+  return window['go']['main']['App']['StartPortForward'](arg1);
+}
+
 export function StartTerminalSession(arg1, arg2) {
   return window['go']['main']['App']['StartTerminalSession'](arg1, arg2);
 }
@@ -168,6 +176,10 @@ export function StopPodLogsStream() {
 
 export function StopPodsStream() {
   return window['go']['main']['App']['StopPodsStream']();
+}
+
+export function StopPortForward(arg1) {
+  return window['go']['main']['App']['StopPortForward'](arg1);
 }
 
 export function TriggerCronJobResource(arg1, arg2, arg3) {

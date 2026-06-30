@@ -194,10 +194,15 @@ export default function DeploymentDetailPanel({
   const deploymentKey = `${workloadTab}:${selectedDeployment.namespace}/${selectedDeployment.name}`
   const workloadLabel = workloadSingularLabel(workloadTab)
   const isDaemonSet = workloadTab === 'daemon-sets'
+  const isReplicaSet = workloadTab === 'replica-sets'
   const isJob = workloadTab === 'jobs'
   const isCronJob = workloadTab === 'cronjobs'
   const isCronSuspended = deploymentDetail?.suspend ?? ((selectedDeployment.suspend ?? '').toLowerCase() === 'yes')
-  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (workloadTab === 'deployments' || workloadTab === 'stateful-sets'))
+  const scaleSupported = Boolean(deploymentDetail?.scaleSupported ?? (
+    workloadTab === 'deployments'
+    || workloadTab === 'replica-sets'
+    || workloadTab === 'stateful-sets'
+  ))
   const detailTabs = useMemo(
     () => {
       let base = DETAIL_TABS_BASE
@@ -1407,7 +1412,7 @@ export default function DeploymentDetailPanel({
               </div>
             </div>
 
-            {!isDaemonSet && !isJob && (
+            {!isDaemonSet && !isReplicaSet && !isJob && (
               <section className="pods-detail-section">
                 <h5>
                   {isCronJob

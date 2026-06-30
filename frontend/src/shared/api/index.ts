@@ -45,7 +45,7 @@ export {
 
 export { EventsOn } from '../../../wailsjs/runtime/runtime'
 
-import type { BatchDeleteKind, BatchDeleteResult, ResourceRef, TerminalTarget } from '../types'
+import type { BatchDeleteKind, BatchDeleteResult, PortForwardRequest, PortForwardSession, ResourceRef, TerminalTarget } from '../types'
 
 type WailsAppBridge = {
   DeleteResourcesBatch: (filename: string, kind: BatchDeleteKind, items: ResourceRef[]) => Promise<BatchDeleteResult>
@@ -53,6 +53,9 @@ type WailsAppBridge = {
   WriteTerminalInput: (sessionId: string, data: string) => Promise<void>
   ResizeTerminalSession: (sessionId: string, cols: number, rows: number) => Promise<void>
   CloseTerminalSession: (sessionId: string) => Promise<void>
+  StartPortForward: (request: PortForwardRequest) => Promise<PortForwardSession>
+  StopPortForward: (sessionId: string) => Promise<PortForwardSession>
+  ListPortForwards: () => Promise<PortForwardSession[]>
 }
 
 function getAppBridge(): WailsAppBridge {
@@ -81,4 +84,16 @@ export function ResizeTerminalSession(sessionId: string, cols: number, rows: num
 
 export function CloseTerminalSession(sessionId: string): Promise<void> {
   return getAppBridge().CloseTerminalSession(sessionId)
+}
+
+export function StartPortForward(request: PortForwardRequest): Promise<PortForwardSession> {
+  return getAppBridge().StartPortForward(request)
+}
+
+export function StopPortForward(sessionId: string): Promise<PortForwardSession> {
+  return getAppBridge().StopPortForward(sessionId)
+}
+
+export function ListPortForwards(): Promise<PortForwardSession[]> {
+  return getAppBridge().ListPortForwards()
 }

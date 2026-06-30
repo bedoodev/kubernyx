@@ -62,6 +62,8 @@ func TestBuildCommandSpecForPod(t *testing.T) {
 		"--kubeconfig /tmp/demo-kubeconfig",
 		"exec -it pod-a -n default -c main -- sh -lc",
 		"LS_COLORS=",
+		"__kubernyx_prompt",
+		`PS1="${PWD:-$(pwd)} # "`,
 		"ls --color=never",
 	} {
 		if !strings.Contains(joined, expected) {
@@ -88,5 +90,8 @@ func TestBuildCommandSpecForNode(t *testing.T) {
 	}
 	if !strings.Contains(joined, "ls --color=never") {
 		t.Fatalf("unexpected node exec args: %q", joined)
+	}
+	if !strings.Contains(joined, `PS1="${PWD:-$(pwd)} # "`) {
+		t.Fatalf("expected cwd prompt in node exec args: %q", joined)
 	}
 }

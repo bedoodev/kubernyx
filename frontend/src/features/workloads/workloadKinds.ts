@@ -1,12 +1,14 @@
 import type { WorkloadTabId } from '../../shared/types'
 
 export type NonPodWorkloadTabId = Exclude<WorkloadTabId, 'pods'>
-export type WorkloadAPIKind = 'deployment' | 'daemonset' | 'statefulset' | 'job' | 'cronjob'
+export type WorkloadAPIKind = 'deployment' | 'replicaset' | 'daemonset' | 'statefulset' | 'job' | 'cronjob'
 
 export function toWorkloadAPIKind(tab: NonPodWorkloadTabId): WorkloadAPIKind {
   switch (tab) {
     case 'deployments':
       return 'deployment'
+    case 'replica-sets':
+      return 'replicaset'
     case 'daemon-sets':
       return 'daemonset'
     case 'stateful-sets':
@@ -24,6 +26,8 @@ export function workloadSingularLabel(tab: NonPodWorkloadTabId): string {
   switch (tab) {
     case 'deployments':
       return 'Deployment'
+    case 'replica-sets':
+      return 'Replica Set'
     case 'daemon-sets':
       return 'Daemon Set'
     case 'stateful-sets':
@@ -41,6 +45,8 @@ export function workloadPluralLabel(tab: NonPodWorkloadTabId): string {
   switch (tab) {
     case 'deployments':
       return 'Deployments'
+    case 'replica-sets':
+      return 'Replica Sets'
     case 'daemon-sets':
       return 'Daemon Sets'
     case 'stateful-sets':

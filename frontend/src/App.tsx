@@ -163,6 +163,7 @@ function normalizeDetailPanelTab(kind: PodDetailTabState['kind'], tab?: DetailPa
   if (kind === 'network') {
     return (
       tab === 'overview'
+      || tab === 'port-forward'
       || tab === 'yaml'
     ) ? tab : 'overview'
   }
@@ -186,6 +187,7 @@ function normalizeDetailPanelTab(kind: PodDetailTabState['kind'], tab?: DetailPa
     || tab === 'containers'
     || tab === 'logs'
     || tab === 'shell'
+    || tab === 'port-forward'
     || tab === 'usages'
     || tab === 'manifest'
   ) ? tab : 'overview'
@@ -1060,6 +1062,18 @@ export default function App() {
     ? `${activePodDetailTab.deployment?.namespace ?? ''}/${activePodDetailTab.deployment?.name ?? ''}`
     : null
 
+  const handleActivePodMissing = () => {
+    if (activePodDetailTab?.kind === 'pod') {
+      handleClosePodDetailTab(activePodDetailTab.id)
+    }
+  }
+
+  const handleActiveDeploymentMissing = () => {
+    if (activePodDetailTab?.kind === 'deployment') {
+      handleClosePodDetailTab(activePodDetailTab.id)
+    }
+  }
+
   const activeConfigKey = (activeTab?.section === 'config'
     && activePodDetailTab
     && activePodDetailTab.kind === 'config'
@@ -1144,7 +1158,7 @@ export default function App() {
           />
         </>
       )}
-      <main className="main-panel">
+      <main className={`main-panel ${scopedPodDetailTabs.length > 0 ? 'has-detail-tabs' : 'no-detail-tabs'}`}>
         {scopedPodDetailTabs.length > 0 && (
           <div className="cluster-tabs">
             {scopedPodDetailTabs.map(tab => {
@@ -1211,6 +1225,8 @@ export default function App() {
                   deployment,
                   options,
                 )}
+                onActivePodMissing={handleActivePodMissing}
+                onActiveDeploymentMissing={handleActiveDeploymentMissing}
               />
             ) : activeTab.section === 'config' ? (
               <ConfigView
