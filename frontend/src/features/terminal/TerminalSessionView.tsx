@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import type { FitAddon } from '@xterm/addon-fit'
 import type { Terminal } from 'xterm'
 import {
@@ -20,6 +21,87 @@ interface Props {
   target: TerminalTarget
   active: boolean
   className?: string
+}
+
+const SHELL_PROMPT_PATTERN = /((?:~|\/)[^\r\n]* # )/g
+
+const TERMINAL_THEME = {
+  background: '#071018',
+  foreground: '#d8e7ef',
+  cursor: '#ffd166',
+  cursorAccent: '#071018',
+  selectionBackground: 'rgba(125, 211, 252, 0.28)',
+  black: '#0b1220',
+  brightBlack: '#5f6f89',
+  red: '#ff7b86',
+  brightRed: '#ff9aa2',
+  green: '#6ee7a8',
+  brightGreen: '#8ff0bc',
+  yellow: '#f6d365',
+  brightYellow: '#ffe08a',
+  blue: '#7da9ff',
+  brightBlue: '#9abfff',
+  magenta: '#c4a7ff',
+  brightMagenta: '#d7c2ff',
+  cyan: '#62d8ef',
+  brightCyan: '#8feeff',
+  white: '#d8e7ef',
+  brightWhite: '#ffffff',
+}
+
+function insertLineBreaksBeforePrompt(data: string, prompt: string | null, previousLineHasContent: boolean): string {
+  if (!prompt) {
+    return data
+  }
+
+  let normalized = ''
+  let cursor = 0
+  let promptIndex = data.indexOf(prompt)
+  while (promptIndex !== -1) {
+    normalized += data.slice(cursor, promptIndex)
+    const previousCharacter = data[promptIndex - 1]
+    const promptContinuesPreviousLine = promptIndex === 0
+      ? previousLineHasContent
+      : previousCharacter !== '\n' && previousCharacter !== '\r'
+    if (promptContinuesPreviousLine) {
+      normalized += '\r\n'
+    }
+    normalized += prompt
+    cursor = promptIndex + prompt.length
+    promptIndex = data.indexOf(prompt, cursor)
+  }
+
+  return `${normalized}${data.slice(cursor)}`
+}
+
+function extractShellPrompt(data: string): string | null {
+  SHELL_PROMPT_PATTERN.lastIndex = 0
+  let prompt: string | null = null
+  let match = SHELL_PROMPT_PATTERN.exec(data)
+  while (match) {
+    prompt = match[1]
+    match = SHELL_PROMPT_PATTERN.exec(data)
+  }
+  return prompt
+}
+
+function normalizeShellOutput(
+  data: string,
+  previousPrompt: string | null,
+  previousLineHasContent: boolean,
+): { data: string; prompt: string | null; lineHasContent: boolean } {
+  const withKnownPromptBreaks = insertLineBreaksBeforePrompt(data, previousPrompt, previousLineHasContent)
+  const detectedPrompt = extractShellPrompt(withKnownPromptBreaks)
+  const normalizedData = insertLineBreaksBeforePrompt(withKnownPromptBreaks, detectedPrompt, previousLineHasContent)
+  const promptlessData = detectedPrompt ? normalizedData.split(detectedPrompt).join('') : normalizedData
+  const lastCharacter = promptlessData[promptlessData.length - 1]
+  return {
+    data: promptlessData,
+    prompt: detectedPrompt,
+    lineHasContent: promptlessData.length > 0
+      ? lastCharacter !== '\n' && lastCharacter !== '\r'
+      : previousLineHasContent,
+  }
 }
 
 function buildInitialState(target: TerminalTarget): { state: TerminalStatusState; message?: string } {
@@ -78,6 +160,16 @@ function getTargetChips(target: TerminalTarget): string[] {
   return chips
 }
 
+function getTargetSubtitle(target: TerminalTarget): string {
+  if (target.kind === 'pod') {
+    return [target.namespace, target.podName, target.container].filter(Boolean).join(' / ')
+  }
+  if (target.kind === 'node') {
+    return target.nodeName ? `node / ${target.nodeName}` : 'node'
+  }
+  return target.filename
+}
+
 export default function TerminalSessionView({ target, active, className = '' }: Props) {
   const targetKey = [
     target.kind,
@@ -92,6 +184,7 @@ export default function TerminalSessionView({ target, active, className = '' }: 
     [targetKey],
   )
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const fitFrameRef = useRef<number | null>(null)
@@ -99,11 +192,35 @@ export default function TerminalSessionView({ target, active, className = '' }: 
   const activeRef = useRef(active)
   const statusStateRef = useRef<string>(buildInitialState(target).state)
   const pendingOutputRef = useRef<string[]>([])
+  const pendingShellEchoRef = useRef<string | null>(null)
+  const shellPromptRef = useRef<string | null>(null)
+  const lineHasContentRef = useRef(false)
   const [statusState, setStatusState] = useState<string>(buildInitialState(target).state)
   const [statusMessage, setStatusMessage] = useState<string | undefined>(buildInitialState(target).message)
   const [closedInfo, setClosedInfo] = useState<{ exitCode: number; error?: string } | null>(null)
+  const [commandInput, setCommandInput] = useState('')
+  const [commandHistory, setCommandHistory] = useState<string[]>([])
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
+  const [inputPrompt, setInputPrompt] = useState('#')
   const targetTitle = getTargetTitle(target)
   const targetChips = getTargetChips(target)
+  const targetSubtitle = getTargetSubtitle(target)
+  const inputDisabled = statusState !== 'connected'
+
+  const writeTerminalOutput = (data: string) => {
+    if (!data) {
+      return
+    }
+
+    const terminal = terminalRef.current
+    if (!terminal) {
+      pendingOutputRef.current.push(data)
+      return
+    }
+    terminal.write(data, () => {
+      terminal.scrollToBottom()
+    })
+  }
 
   const fitAndResizeTerminal = (options: { force?: boolean; focus?: boolean } = {}) => {
     if (fitFrameRef.current !== null) {
@@ -135,9 +252,80 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       }
 
       if (options.focus) {
-        terminal.focus()
+        inputRef.current?.focus()
       }
     })
+  }
+
+  const sendRawInput = (data: string) => {
+    if (statusStateRef.current !== 'connected') {
+      return
+    }
+    terminalRef.current?.scrollToBottom()
+    void WriteTerminalInput(sessionId, data)
+  }
+
+  const submitCommand = () => {
+    if (inputDisabled) {
+      return
+    }
+
+    const command = commandInput
+    const commandLine = `${inputPrompt} ${command}`.trimEnd()
+    writeTerminalOutput(`${commandLine}\r\n`)
+    lineHasContentRef.current = false
+    pendingShellEchoRef.current = command === '' ? null : command
+    sendRawInput(`${command}\r`)
+    if (command.trim() !== '') {
+      setCommandHistory(current => {
+        const next = current[current.length - 1] === command ? current : [...current, command]
+        return next.slice(-100)
+      })
+    }
+    setHistoryCursor(null)
+    setCommandInput('')
+  }
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      submitCommand()
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (commandHistory.length === 0) {
+        return
+      }
+      const nextCursor = historyCursor === null ? commandHistory.length - 1 : Math.max(0, historyCursor - 1)
+      setHistoryCursor(nextCursor)
+      setCommandInput(commandHistory[nextCursor])
+      return
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (commandHistory.length === 0 || historyCursor === null) {
+        return
+      }
+      const nextCursor = historyCursor + 1
+      if (nextCursor >= commandHistory.length) {
+        setHistoryCursor(null)
+        setCommandInput('')
+        return
+      }
+      setHistoryCursor(nextCursor)
+      setCommandInput(commandHistory[nextCursor])
+      return
+    }
+
+    if (event.key.toLowerCase() === 'c' && event.ctrlKey) {
+      event.preventDefault()
+      sendRawInput('\x03')
+      setHistoryCursor(null)
+      setCommandInput('')
+    }
   }
 
   useEffect(() => {
@@ -156,7 +344,6 @@ export default function TerminalSessionView({ target, active, className = '' }: 
 
     let disposed = false
     let resizeObserver: ResizeObserver | null = null
-    let dataDisposable: { dispose: () => void } | null = null
     let terminalInstance: Terminal | null = null
     let detachFocusHandler: (() => void) | null = null
 
@@ -173,16 +360,17 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       const terminal = new Terminal({
         convertEol: true,
         cursorBlink: true,
+        cursorStyle: 'bar',
+        cursorWidth: 2,
+        disableStdin: true,
         fontFamily: '"SFMono-Regular", Menlo, Monaco, Consolas, monospace',
-        fontSize: 13,
-        lineHeight: 1.3,
-        scrollback: 3000,
-        theme: {
-          background: '#041119',
-          foreground: '#d9f2ff',
-          cursor: '#9bf6ff',
-          selectionBackground: 'rgba(109, 212, 255, 0.22)',
-        },
+        fontSize: 14,
+        lineHeight: 1.42,
+        minimumContrastRatio: 4.5,
+        rightClickSelectsWord: true,
+        scrollback: 5000,
+        scrollOnUserInput: true,
+        theme: TERMINAL_THEME,
       })
       const fitAddon = new FitAddon()
       terminal.loadAddon(fitAddon)
@@ -195,7 +383,9 @@ export default function TerminalSessionView({ target, active, className = '' }: 
         if (pendingOutputRef.current.length === 0) {
           return
         }
-        terminal.write(pendingOutputRef.current.join(''))
+        terminal.write(pendingOutputRef.current.join(''), () => {
+          terminal.scrollToBottom()
+        })
         pendingOutputRef.current = []
       }
 
@@ -209,20 +399,13 @@ export default function TerminalSessionView({ target, active, className = '' }: 
 
       const handlePointerDown = () => {
         if (activeRef.current) {
-          terminal.focus()
+          inputRef.current?.focus()
         }
       }
       container.addEventListener('pointerdown', handlePointerDown)
       detachFocusHandler = () => {
         container.removeEventListener('pointerdown', handlePointerDown)
       }
-
-      dataDisposable = terminal.onData(data => {
-        if (statusStateRef.current !== 'connected') {
-          return
-        }
-        void WriteTerminalInput(sessionId, data)
-      })
     }
 
     void initializeTerminal().catch((errorValue: unknown) => {
@@ -239,7 +422,6 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       }
       resizeObserver?.disconnect()
       detachFocusHandler?.()
-      dataDisposable?.dispose()
       terminalInstance?.dispose()
       terminalRef.current = null
       fitAddonRef.current = null
@@ -254,12 +436,24 @@ export default function TerminalSessionView({ target, active, className = '' }: 
       if (!data) {
         return
       }
-      const terminal = terminalRef.current
-      if (!terminal) {
-        pendingOutputRef.current.push(data)
-        return
+      const pendingEcho = pendingShellEchoRef.current
+      if (pendingEcho !== null) {
+        const echoPattern = new RegExp(`^${pendingEcho.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\r?\\n?`)
+        data = data.replace(echoPattern, '')
+        pendingShellEchoRef.current = null
+        if (!data) {
+          return
+        }
       }
-      terminal.write(data)
+
+      const normalized = normalizeShellOutput(data, shellPromptRef.current, lineHasContentRef.current)
+      const prompt = normalized.prompt
+      if (prompt) {
+        shellPromptRef.current = prompt
+        setInputPrompt(prompt.trim())
+      }
+      lineHasContentRef.current = normalized.lineHasContent
+      writeTerminalOutput(normalized.data)
     }
 
     const unsubscribeData = EventsOn('terminal-data', (payload: unknown) => {
@@ -321,16 +515,23 @@ export default function TerminalSessionView({ target, active, className = '' }: 
     fitAndResizeTerminal({ force: true, focus: statusStateRef.current === 'connected' })
   }, [active, statusState])
 
+  useEffect(() => {
+    if (active && statusState === 'connected') {
+      inputRef.current?.focus()
+    }
+  }, [active, statusState])
+
   return (
     <div className={`terminal-session-root ${className}`.trim()}>
-      <div className="terminal-session-toolbar">
-        <div className="terminal-session-toolbar-main">
-          <span className={`terminal-session-status-pill state-${statusState}`}>
-            <span className="terminal-session-status-dot" />
-            <span className="terminal-session-status-label">{getStatusLabel(statusState)}</span>
-          </span>
+      <div className="terminal-session-chrome">
+        <div className="terminal-session-identity">
           <strong className="terminal-session-title">{targetTitle}</strong>
+          <span className="terminal-session-subtitle">{targetSubtitle}</span>
         </div>
+        <span className={`terminal-session-status-pill state-${statusState}`}>
+          <span className="terminal-session-status-dot" />
+          <span className="terminal-session-status-label">{getStatusLabel(statusState)}</span>
+        </span>
         {targetChips.length > 0 && (
           <div className="terminal-session-targets" aria-label="Shell target">
             {targetChips.map(chip => (
@@ -347,7 +548,38 @@ export default function TerminalSessionView({ target, active, className = '' }: 
           </div>
         )}
       </div>
-      <div className="terminal-session-surface" ref={containerRef} tabIndex={-1} />
+      <div className="terminal-session-workspace">
+        <div className="terminal-session-output-frame">
+          <div className="terminal-session-surface" ref={containerRef} tabIndex={-1} />
+        </div>
+      </div>
+      <form
+        className={`terminal-session-composer ${inputDisabled ? 'is-disabled' : ''}`}
+        onSubmit={event => {
+          event.preventDefault()
+          submitCommand()
+        }}
+      >
+        <div className="terminal-session-composer-main">
+          <span className="terminal-session-input-prompt" title={inputPrompt}>{inputPrompt}</span>
+          <input
+            ref={inputRef}
+            className="terminal-session-command-input"
+            value={commandInput}
+            onChange={event => {
+              setCommandInput(event.target.value)
+              setHistoryCursor(null)
+            }}
+            onKeyDown={handleInputKeyDown}
+            disabled={inputDisabled}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            aria-label="Terminal command input"
+            placeholder={inputDisabled ? getStatusLabel(statusState) : ''}
+          />
+        </div>
+      </form>
     </div>
   )
 }
