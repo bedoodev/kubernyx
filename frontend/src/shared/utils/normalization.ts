@@ -278,6 +278,10 @@ export function toPodDetail(data: unknown): PodDetail {
     })
     : []
 
+  const tolerations = Array.isArray(record.tolerations)
+    ? record.tolerations.map(item => String(item ?? '-'))
+    : []
+
   const containers = Array.isArray(record.containers)
     ? record.containers.map(toPodDetailContainer)
     : []
@@ -337,6 +341,7 @@ export function toPodDetail(data: unknown): PodDetail {
     annotations,
     ownerReferences,
     volumes,
+    tolerations,
     initContainers,
     containers,
     conditions,
