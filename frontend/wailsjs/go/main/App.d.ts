@@ -49,6 +49,8 @@ export function GetPodDetails(arg1:string,arg2:string,arg3:string):Promise<kube.
 
 export function GetPodLogs(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<kube.PodLogLine>>;
 
+export function GetRbacResources(arg1:string,arg2:string,arg3:Array<string>):Promise<Array<kube.RbacResource>>;
+
 export function GetWorkloadDetails(arg1:string,arg2:string,arg3:string,arg4:string):Promise<kube.DeploymentDetail>;
 
 export function GetWorkloadLogs(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<Array<kube.DeploymentLogLine>>;

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { ClusterInfo, ClusterOverview, WorkloadCounts, NodeFilter, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId } from '../types'
-import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS } from '../types'
+import type { ClusterInfo, ClusterOverview, WorkloadCounts, NodeFilter, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId, RbacTabId } from '../types'
+import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS, RBAC_TAB_OPTIONS } from '../types'
 import { toClusterHealthStatus, normalizeWorkloads } from '../utils/normalization'
 import {
   ListClusters,
@@ -19,6 +19,7 @@ const OVERVIEW_TAB_TITLE = 'Overview'
 const DEFAULT_WORKLOAD_TAB: WorkloadTabId = 'pods'
 const DEFAULT_CONFIG_TAB: ConfigTabId = 'config-maps'
 const DEFAULT_NETWORK_TAB: NetworkTabId = 'services'
+const DEFAULT_RBAC_TAB: RbacTabId = 'roles'
 const CLUSTER_TABS_STORAGE_KEY = 'kubernyx-cluster-tabs-v1'
 
 interface PersistedClusterTabState {
@@ -28,6 +29,7 @@ interface PersistedClusterTabState {
   workloadTab?: WorkloadTabId
   configTab?: ConfigTabId
   networkTab?: NetworkTabId
+  rbacTab?: RbacTabId
   hasActivity?: boolean
   nodeFilter?: NodeFilter
   selectedNamespaces?: string[]
@@ -66,6 +68,10 @@ function isNetworkTabId(value: unknown): value is NetworkTabId {
   return NETWORK_TAB_OPTIONS.some(option => option.id === value)
 }
 
+function isRbacTabId(value: unknown): value is RbacTabId {
+  return RBAC_TAB_OPTIONS.some(option => option.id === value)
+}
+
 function isNodeFilter(value: unknown): value is NodeFilter {
   return value === 'both' || value === 'master' || value === 'worker'
 }
@@ -75,6 +81,7 @@ function isClusterSection(value: unknown): value is ClusterSection {
     || value === 'workloads'
     || value === 'config'
     || value === 'network'
+    || value === 'rbac'
     || value === 'nodes'
     || value === 'events'
 }
@@ -106,6 +113,7 @@ function readPersistedClusterTabsState(): PersistedClusterTabsState | null {
       const workloadTab = isWorkloadTabId(record.workloadTab) ? record.workloadTab : DEFAULT_WORKLOAD_TAB
       const configTab = isConfigTabId(record.configTab) ? record.configTab : DEFAULT_CONFIG_TAB
       const networkTab = isNetworkTabId(record.networkTab) ? record.networkTab : DEFAULT_NETWORK_TAB
+      const rbacTab = isRbacTabId(record.rbacTab) ? record.rbacTab : DEFAULT_RBAC_TAB
       const nodeFilter = isNodeFilter(record.nodeFilter) ? record.nodeFilter : 'both'
 
       tabs.push({
@@ -115,6 +123,7 @@ function readPersistedClusterTabsState(): PersistedClusterTabsState | null {
         workloadTab,
         configTab,
         networkTab,
+        rbacTab,
         hasActivity: Boolean(record.hasActivity),
         nodeFilter,
         selectedNamespaces: sanitizeNamespaces(record.selectedNamespaces),
@@ -143,6 +152,7 @@ export interface ClusterTabState {
   workloadTab: WorkloadTabId
   configTab: ConfigTabId
   networkTab: NetworkTabId
+  rbacTab: RbacTabId
   hasActivity: boolean
   cluster: ClusterInfo
   overview: ClusterOverview | null
@@ -176,6 +186,7 @@ export function getClusterTabId(
   workloadTab: WorkloadTabId = DEFAULT_WORKLOAD_TAB,
   configTab: ConfigTabId = DEFAULT_CONFIG_TAB,
   networkTab: NetworkTabId = DEFAULT_NETWORK_TAB,
+  rbacTab: RbacTabId = DEFAULT_RBAC_TAB,
 ): string {
   if (section === 'overview') {
     return `overview:${clusterFilename}`
@@ -185,6 +196,9 @@ export function getClusterTabId(
   }
   if (section === 'network') {
     return `network:${networkTab}:${clusterFilename}`
+  }
+  if (section === 'rbac') {
+    return `rbac:${rbacTab}:${clusterFilename}`
   }
   if (section === 'nodes') {
     return `nodes:${clusterFilename}`
@@ -207,6 +221,10 @@ export function getNetworkTabTitle(networkTab: NetworkTabId): string {
   return NETWORK_TAB_OPTIONS.find(option => option.id === networkTab)?.label ?? 'Network'
 }
 
+export function getRbacTabTitle(rbacTab: RbacTabId): string {
+  return RBAC_TAB_OPTIONS.find(option => option.id === rbacTab)?.label ?? 'RBAC'
+}
+
 export function getTabDisplayName(tab: ClusterTabState): string {
   return `${tab.title} < ${tab.cluster.name} >`
 }
@@ -223,12 +241,14 @@ function getSectionTitle(
   workloadTab: WorkloadTabId,
   configTab: ConfigTabId,
   networkTab: NetworkTabId,
+  rbacTab: RbacTabId,
 ): string {
   switch (section) {
     case 'overview': return OVERVIEW_TAB_TITLE
     case 'workloads': return getWorkloadTabTitle(workloadTab)
     case 'config': return getConfigTabTitle(configTab)
     case 'network': return getNetworkTabTitle(networkTab)
+    case 'rbac': return getRbacTabTitle(rbacTab)
     case 'nodes': return 'Nodes'
     case 'events': return 'Events'
     default: return OVERVIEW_TAB_TITLE
@@ -241,20 +261,23 @@ function createClusterTab(
   workloadTab: WorkloadTabId = DEFAULT_WORKLOAD_TAB,
   configTab: ConfigTabId = DEFAULT_CONFIG_TAB,
   networkTab: NetworkTabId = DEFAULT_NETWORK_TAB,
+  rbacTab: RbacTabId = DEFAULT_RBAC_TAB,
   selectedNamespaces: string[] = [],
 ): ClusterTabState {
   const normalizedWorkloadTab = section === 'workloads' ? workloadTab : DEFAULT_WORKLOAD_TAB
   const normalizedConfigTab = section === 'config' ? configTab : DEFAULT_CONFIG_TAB
   const normalizedNetworkTab = section === 'network' ? networkTab : DEFAULT_NETWORK_TAB
-  const title = getSectionTitle(section, normalizedWorkloadTab, normalizedConfigTab, normalizedNetworkTab)
+  const normalizedRbacTab = section === 'rbac' ? rbacTab : DEFAULT_RBAC_TAB
+  const title = getSectionTitle(section, normalizedWorkloadTab, normalizedConfigTab, normalizedNetworkTab, normalizedRbacTab)
 
   return {
-    id: getClusterTabId(section, cluster.filename, normalizedWorkloadTab, normalizedConfigTab, normalizedNetworkTab),
+    id: getClusterTabId(section, cluster.filename, normalizedWorkloadTab, normalizedConfigTab, normalizedNetworkTab, normalizedRbacTab),
     title,
     section,
     workloadTab: normalizedWorkloadTab,
     configTab: normalizedConfigTab,
     networkTab: normalizedNetworkTab,
+    rbacTab: normalizedRbacTab,
     hasActivity: false,
     cluster,
     overview: null,
@@ -286,7 +309,9 @@ export interface UseClusterTabsResult {
   activeNetworkNamespaceOptions: string[]
   activeEventsNamespaces: string[]
   activeEventsNamespaceOptions: string[]
-  handleSelectCluster: (cluster: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId, networkTab?: NetworkTabId) => void
+  activeRbacNamespaces: string[]
+  activeRbacNamespaceOptions: string[]
+  handleSelectCluster: (cluster: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId, networkTab?: NetworkTabId, rbacTab?: RbacTabId) => void
   handleActivateTab: (tabId: string) => void
   handleCloseTab: (tabId: string) => void
   handleNodeFilterChange: (filter: NodeFilter) => Promise<void>
@@ -295,6 +320,7 @@ export interface UseClusterTabsResult {
   handleConfigNamespacesChange: (ns: string[]) => Promise<void>
   handleNetworkNamespacesChange: (ns: string[]) => Promise<void>
   handleEventsNamespacesChange: (ns: string[]) => Promise<void>
+  handleRbacNamespacesChange: (ns: string[]) => Promise<void>
   handleAddCluster: (name: string, content: string) => Promise<void>
   handleRenameCluster: (oldFilename: string, newName: string) => Promise<void>
   handleDeleteCluster: (filename: string) => Promise<void>
@@ -320,7 +346,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
   const activeTab = activeTabId ? tabs.find(tab => tab.id === activeTabId) ?? null : null
   const activeWorkloadClusterFilename = activeTab?.section === 'workloads' ? activeTab.cluster.filename : null
   const activeConfigClusterFilename = activeTab?.section === 'config' ? activeTab.cluster.filename : null
-  const activeResourceClusterFilename = (activeTab?.section === 'workloads' || activeTab?.section === 'config' || activeTab?.section === 'network' || activeTab?.section === 'events')
+  const activeResourceClusterFilename = (activeTab?.section === 'workloads' || activeTab?.section === 'config' || activeTab?.section === 'network' || activeTab?.section === 'events' || activeTab?.section === 'rbac')
     ? activeTab.cluster.filename
     : null
 
@@ -351,6 +377,14 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     : []
   const activeEventsNamespaceOptions = activeEventsClusterFilename
     ? (resourceNamespaceOptionsByCluster[activeEventsClusterFilename] ?? [])
+    : []
+
+  const activeRbacClusterFilename = activeTab?.section === 'rbac' ? activeTab.cluster.filename : null
+  const activeRbacNamespaces = activeRbacClusterFilename
+    ? (resourceNamespacesByCluster[activeRbacClusterFilename] ?? [])
+    : []
+  const activeRbacNamespaceOptions = activeRbacClusterFilename
+    ? (resourceNamespaceOptionsByCluster[activeRbacClusterFilename] ?? [])
     : []
 
   const loadClusters = useCallback(async () => {
@@ -394,9 +428,13 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
             const networkTab = section === 'network'
               ? (persistedTab.networkTab ?? DEFAULT_NETWORK_TAB)
               : DEFAULT_NETWORK_TAB
+            const rbacTab = section === 'rbac'
+              ? (persistedTab.rbacTab ?? DEFAULT_RBAC_TAB)
+              : DEFAULT_RBAC_TAB
             const needsNamespaces = section === 'workloads'
               || section === 'config'
               || section === 'network'
+              || section === 'rbac'
               || section === 'events'
             const selectedNamespaces = needsNamespaces
               ? sanitizeNamespaces(
@@ -412,6 +450,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
               workloadTab,
               configTab,
               networkTab,
+              rbacTab,
               selectedNamespaces,
             )
             const tabId = persistedTab.id || tab.id
@@ -445,12 +484,12 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
             return []
           }
 
-          const nextId = getClusterTabId(tab.section, updatedCluster.filename, tab.workloadTab, tab.configTab, tab.networkTab)
+          const nextId = getClusterTabId(tab.section, updatedCluster.filename, tab.workloadTab, tab.configTab, tab.networkTab, tab.rbacTab)
           tabIdMap.set(tab.id, nextId)
           return [{
             ...tab,
             id: nextId,
-            title: getSectionTitle(tab.section, tab.workloadTab, tab.configTab, tab.networkTab),
+            title: getSectionTitle(tab.section, tab.workloadTab, tab.configTab, tab.networkTab, tab.rbacTab),
             cluster: updatedCluster,
           }]
         })
@@ -620,6 +659,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     workloadTab?: WorkloadTabId,
     configTab?: ConfigTabId,
     networkTab?: NetworkTabId,
+    rbacTab?: RbacTabId,
   ) => {
     if (section === 'workloads' && !workloadTab) {
       return
@@ -630,12 +670,16 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     if (section === 'network' && !networkTab) {
       return
     }
+    if (section === 'rbac' && !rbacTab) {
+      return
+    }
 
     const resolvedWorkloadTab = section === 'workloads' ? (workloadTab ?? DEFAULT_WORKLOAD_TAB) : DEFAULT_WORKLOAD_TAB
     const resolvedConfigTab = section === 'config' ? (configTab ?? DEFAULT_CONFIG_TAB) : DEFAULT_CONFIG_TAB
     const resolvedNetworkTab = section === 'network' ? (networkTab ?? DEFAULT_NETWORK_TAB) : DEFAULT_NETWORK_TAB
+    const resolvedRbacTab = section === 'rbac' ? (rbacTab ?? DEFAULT_RBAC_TAB) : DEFAULT_RBAC_TAB
     const clusterResourceNamespaces = resourceNamespacesByCluster[cluster.filename] ?? []
-    const tabId = getClusterTabId(section, cluster.filename, resolvedWorkloadTab, resolvedConfigTab, resolvedNetworkTab)
+    const tabId = getClusterTabId(section, cluster.filename, resolvedWorkloadTab, resolvedConfigTab, resolvedNetworkTab, resolvedRbacTab)
     const now = Date.now()
     const previousSelection = previousSidebarSelectionRef.current
     const isDoubleSelect = !!previousSelection
@@ -645,7 +689,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
 
     setTabs(current => {
       const idx = current.findIndex(tab => tab.id === tabId)
-      const needsNamespaces = section === 'workloads' || section === 'config' || section === 'network' || section === 'events'
+      const needsNamespaces = section === 'workloads' || section === 'config' || section === 'network' || section === 'events' || section === 'rbac'
       if (idx >= 0) {
         const next = [...current]
         next[idx] = {
@@ -654,7 +698,8 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           workloadTab: section === 'workloads' ? resolvedWorkloadTab : next[idx].workloadTab,
           configTab: section === 'config' ? resolvedConfigTab : next[idx].configTab,
           networkTab: section === 'network' ? resolvedNetworkTab : next[idx].networkTab,
-          title: getSectionTitle(section, resolvedWorkloadTab, resolvedConfigTab, resolvedNetworkTab),
+          rbacTab: section === 'rbac' ? resolvedRbacTab : next[idx].rbacTab,
+          title: getSectionTitle(section, resolvedWorkloadTab, resolvedConfigTab, resolvedNetworkTab, resolvedRbacTab),
           selectedNamespaces: needsNamespaces
             ? clusterResourceNamespaces
             : next[idx].selectedNamespaces,
@@ -670,6 +715,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           resolvedWorkloadTab,
           resolvedConfigTab,
           resolvedNetworkTab,
+          resolvedRbacTab,
           needsNamespaces ? clusterResourceNamespaces : [],
         ),
       ]
@@ -874,6 +920,24 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     )))
   }
 
+  const handleRbacNamespacesChange = async (ns: string[]) => {
+    if (!activeTab || activeTab.section !== 'rbac') {
+      return
+    }
+
+    const clusterFilename = activeTab.cluster.filename
+    setResourceNamespacesByCluster(current => ({
+      ...current,
+      [clusterFilename]: ns,
+    }))
+
+    setTabs(current => current.map(tab => (
+      tab.section === 'rbac' && tab.cluster.filename === clusterFilename
+        ? { ...tab, selectedNamespaces: ns, hasActivity: tab.id === activeTab.id ? true : tab.hasActivity }
+        : tab
+    )))
+  }
+
   const handleAddCluster = async (name: string, content: string) => {
     await AddClusterApi(name, content)
     await loadClusters()
@@ -888,7 +952,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
           if (tab.cluster.filename !== oldFilename) {
             return tab
           }
-          const nextId = getClusterTabId(tab.section, newFilename, tab.workloadTab, tab.configTab, tab.networkTab)
+          const nextId = getClusterTabId(tab.section, newFilename, tab.workloadTab, tab.configTab, tab.networkTab, tab.rbacTab)
           renamedIdMap.set(tab.id, nextId)
           return {
             ...tab,
@@ -1016,6 +1080,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
         workloadTab: tab.workloadTab,
         configTab: tab.configTab,
         networkTab: tab.networkTab,
+        rbacTab: tab.rbacTab,
         hasActivity: tab.hasActivity,
         nodeFilter: tab.nodeFilter,
         selectedNamespaces: sanitizeNamespaces(tab.selectedNamespaces),
@@ -1049,6 +1114,8 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     activeNetworkNamespaceOptions,
     activeEventsNamespaces,
     activeEventsNamespaceOptions,
+    activeRbacNamespaces,
+    activeRbacNamespaceOptions,
     handleSelectCluster,
     handleActivateTab,
     handleCloseTab,
@@ -1058,6 +1125,7 @@ export function useClusterTabs({ showSettings }: UseClusterTabsOptions): UseClus
     handleConfigNamespacesChange,
     handleNetworkNamespacesChange,
     handleEventsNamespacesChange,
+    handleRbacNamespacesChange,
     handleAddCluster,
     handleRenameCluster,
     handleDeleteCluster,

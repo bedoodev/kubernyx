@@ -1,6 +1,6 @@
-import type { ClusterSection, ConfigTabId, NetworkTabId, WorkloadTabId } from '../../../shared/types'
+import type { ClusterSection, ConfigTabId, NetworkTabId, RbacTabId, WorkloadTabId } from '../../../shared/types'
 
-type SidebarNavIconName = ClusterSection | WorkloadTabId | ConfigTabId | NetworkTabId
+type SidebarNavIconName = ClusterSection | WorkloadTabId | ConfigTabId | NetworkTabId | RbacTabId
 
 interface Props {
   name: SidebarNavIconName
@@ -31,6 +31,8 @@ export default function SidebarNavIcon({ name }: Props) {
       return <svg {...commonProps}><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
     case 'network':
       return <svg {...commonProps}><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="5" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="m7.3 10.8 9.4-4.6M7.3 13.2l9.4 4.6"/></svg>
+    case 'rbac':
+      return <svg {...commonProps}><path d="M12 3 5 6v5c0 4.6 2.9 8 7 10 4.1-2 7-5.4 7-10V6l-7-3Z"/><path d="M9.5 12.2 11 13.7l3.6-4.1"/></svg>
     case 'pods':
       return <svg {...commonProps}><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4.3 7.7 7.7 4.4 7.7-4.4M12 12.1V21"/></svg>
     case 'deployments':
@@ -53,6 +55,14 @@ export default function SidebarNavIcon({ name }: Props) {
       return <svg {...commonProps}><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="m8 8 2.7 7M16 8l-2.7 7M9 6h6"/></svg>
     case 'ingress':
       return <svg {...commonProps}><path d="M4 20V9a5 5 0 0 1 5-5h11"/><path d="m16 1 4 3-4 3M9 20h6M12 17v3"/></svg>
+    case 'roles':
+      return <svg {...commonProps}><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>
+    case 'role-bindings':
+      return <svg {...commonProps}><path d="M8 12h8"/><circle cx="5" cy="12" r="3"/><circle cx="19" cy="12" r="3"/><path d="M12 7v10"/></svg>
+    case 'cluster-roles':
+      return <svg {...commonProps}><circle cx="12" cy="12" r="8"/><path d="M8 12h8M12 8v8"/></svg>
+    case 'cluster-role-bindings':
+      return <svg {...commonProps}><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/><path d="M10 12h4M12 5v14"/></svg>
     default:
       return null
   }

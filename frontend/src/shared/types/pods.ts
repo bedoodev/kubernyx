@@ -97,6 +97,7 @@ export interface PodDetail {
   annotations: Record<string, string>;
   ownerReferences: PodDetailOwnerReference[];
   volumes: PodDetailVolume[];
+  tolerations: string[];
   initContainers: PodDetailContainer[];
   containers: PodDetailContainer[];
   conditions: PodDetailCondition[];

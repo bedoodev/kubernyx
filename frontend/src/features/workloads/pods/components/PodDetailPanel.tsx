@@ -243,6 +243,7 @@ export default function PodDetailPanel({
   const metadataAnnotations = Object.entries(podDetail?.annotations ?? {}).sort(([left], [right]) => left.localeCompare(right))
   const metadataOwnerReferences = podDetail?.ownerReferences ?? []
   const metadataVolumes = podDetail?.volumes ?? []
+  const metadataTolerations = podDetail?.tolerations ?? []
   const portForwardPortOptions = useMemo(() => {
     const seen = new Set<number>()
     const options: Array<{ containerName: string; port: number; name: string; protocol: string }> = []
@@ -1202,7 +1203,7 @@ export default function PodDetailPanel({
                         <span className={`pods-tone-pill tone-${valueToneClass(event.type)}`}>{event.type}</span>
                       </td>
                       <td className="pods-detail-value-cell">{event.reason}</td>
-                      <td className="pods-detail-value-cell">{event.message}</td>
+                    <td className="pods-detail-value-cell pods-detail-message-cell">{event.message}</td>
                       <td className="pods-detail-value-cell">{event.count}</td>
                       <td className="pods-detail-value-cell">{event.age}</td>
                     </tr>
@@ -1940,10 +1941,11 @@ export default function PodDetailPanel({
                 <div className="pods-meta-list">
                   {metadataOwnerReferences.map((owner, index) => (
                     <div key={`${owner.kind}-${owner.name}-${index}`} className="pods-meta-item pods-meta-owner-item">
-                      <span className="pods-meta-key pods-meta-owner-key">
-                        {owner.kind}/{owner.name}
-                      </span>
-                      <span className="pods-meta-owner-uid">{owner.uid || '-'}</span>
+                      <span className="pods-meta-key">{owner.kind}/{owner.name}:</span>
+                      <div className="pods-meta-value-block">
+                        <span className="pods-meta-text-value">{owner.uid || '-'}</span>
+                        {owner.controller && <span className="pods-meta-muted-value">controller</span>}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -2010,8 +2012,10 @@ export default function PodDetailPanel({
                           <div className="pods-meta-volume-body">
                             {group.items.map((volume, index) => (
                               <div key={`${group.type}-${volume.name}-${index}`} className="pods-meta-item pods-meta-volume-item">
-                                <span className="pods-meta-key">{volume.name || '-'}</span>
-                                <span className="pods-meta-volume-detail">{volume.details || '-'}</span>
+                                <span className="pods-meta-key">{volume.name || '-'}:</span>
+                                <div className="pods-meta-value-block">
+                                  <span className="pods-meta-text-value">{volume.details || '-'}</span>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -2019,6 +2023,31 @@ export default function PodDetailPanel({
                       </article>
                     )
                   })}
+                </div>
+              )}
+            </section>
+
+            <section className="pods-meta-card">
+              <header className="pods-meta-card-header">
+                <div className="pods-meta-header-static">
+                  <div className="pods-meta-title">
+                    <span>Tolerations</span>
+                  </div>
+                  <span className="pods-meta-count">{metadataTolerations.length}</span>
+                </div>
+              </header>
+              {metadataTolerations.length === 0 ? (
+                <p className="pods-meta-empty">No tolerations</p>
+              ) : (
+                <div className="pods-meta-list">
+                  {metadataTolerations.map((toleration, index) => (
+                    <div key={`${toleration}-${index}`} className="pods-meta-item">
+                      <span className="pods-meta-key">#{index + 1}:</span>
+                      <div className="pods-meta-value-block">
+                        <span className="pods-meta-text-value">{toleration}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
@@ -2167,7 +2196,7 @@ export default function PodDetailPanel({
             <section className="pods-detail-section">
               <h5>Conditions</h5>
               <div className="pods-detail-table-wrap">
-                <table className="pods-detail-table">
+                <table className="pods-detail-table pods-conditions-table">
                   <thead>
                     <tr>
                       <th>Type</th>
@@ -2189,7 +2218,7 @@ export default function PodDetailPanel({
                               {condition.status}
                             </span>
                           </td>
-                          <td className="pods-detail-value-cell">{condition.message}</td>
+                          <td className="pods-detail-value-cell pods-detail-message-cell">{condition.message}</td>
                         </tr>
                       ))
                     )}

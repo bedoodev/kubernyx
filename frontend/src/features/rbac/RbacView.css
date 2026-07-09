@@ -1,0 +1,13 @@
+.rbac-view .config-view-header {
+  min-height: 34px;
+}
+
+.rbac-table .pods-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rbac-table .rbac-wrap-cell {
+  line-height: 1.45;
+}

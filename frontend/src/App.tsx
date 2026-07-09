@@ -24,6 +24,7 @@ import NodeDetailPanel, { type NodeDetailsTabId } from './features/nodes/compone
 import NetworkView from './features/network/NetworkView'
 import NodesView from './features/nodes/NodesView'
 import EventsView from './features/events/EventsView'
+import RbacView from './features/rbac/RbacView'
 import { useNetworkDetail } from './features/network/hooks/useNetworkDetail'
 import { useNodeDetail } from './features/nodes/hooks/useNodeDetail'
 import ClusterTerminalPanel from './features/terminal/ClusterTerminalPanel'
@@ -1137,6 +1138,7 @@ export default function App() {
             activeWorkloadTab={activeTab?.section !== 'workloads' ? null : activeTab.workloadTab}
             activeConfigTab={activeTab?.section !== 'config' ? null : activeTab.configTab}
             activeNetworkTab={activeTab?.section !== 'network' ? null : activeTab.networkTab}
+            activeRbacTab={activeTab?.section !== 'rbac' ? null : activeTab.rbacTab}
             showSettings={showSettings}
             onToggleCollapse={sidebar.onToggle}
             onSelect={handleSelectCluster}
@@ -1274,6 +1276,14 @@ export default function App() {
                 namespaces={clusterTabs.activeEventsNamespaceOptions}
                 selectedNamespaces={clusterTabs.activeEventsNamespaces}
                 onNamespacesChange={clusterTabs.handleEventsNamespacesChange}
+              />
+            ) : activeTab.section === 'rbac' ? (
+              <RbacView
+                cluster={activeTab.cluster}
+                activeTab={activeTab.rbacTab}
+                namespaces={clusterTabs.activeRbacNamespaceOptions}
+                selectedNamespaces={clusterTabs.activeRbacNamespaces}
+                onNamespacesChange={clusterTabs.handleRbacNamespacesChange}
               />
             ) : (
               <Overview

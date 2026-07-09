@@ -263,6 +263,7 @@ type PodDetail struct {
 	Annotations      map[string]string         `json:"annotations"`
 	OwnerReferences  []PodDetailOwnerReference `json:"ownerReferences"`
 	Volumes          []PodDetailVolume         `json:"volumes"`
+	Tolerations      []string                  `json:"tolerations"`
 	InitContainers   []PodDetailContainer      `json:"initContainers"`
 	Containers       []PodDetailContainer      `json:"containers"`
 	Conditions       []PodDetailCondition      `json:"conditions"`

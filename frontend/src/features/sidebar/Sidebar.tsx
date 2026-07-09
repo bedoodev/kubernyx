@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS } from '../../shared/types'
-import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId } from '../../shared/types'
+import { WORKLOAD_TAB_OPTIONS, CONFIG_TAB_OPTIONS, NETWORK_TAB_OPTIONS, RBAC_TAB_OPTIONS } from '../../shared/types'
+import type { ClusterInfo, ClusterSection, WorkloadTabId, ConfigTabId, NetworkTabId, RbacTabId } from '../../shared/types'
 import AddClusterModal from './components/AddClusterModal'
 import EditClusterModal from './components/EditClusterModal'
 import SidebarNavIcon from './components/SidebarNavIcon'
@@ -14,9 +14,10 @@ interface Props {
   activeWorkloadTab: WorkloadTabId | null
   activeConfigTab: ConfigTabId | null
   activeNetworkTab: NetworkTabId | null
+  activeRbacTab: RbacTabId | null
   showSettings: boolean
   onToggleCollapse: () => void
-  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId, networkTab?: NetworkTabId) => void
+  onSelect: (c: ClusterInfo, section: ClusterSection, workloadTab?: WorkloadTabId, configTab?: ConfigTabId, networkTab?: NetworkTabId, rbacTab?: RbacTabId) => void
   onAdd: (name: string, content: string) => Promise<void>
   onRename: (oldFilename: string, newName: string) => Promise<void>
   onDelete: (filename: string) => Promise<void>
@@ -36,6 +37,8 @@ type NavItem =
   | { type: 'config-tab'; cluster: ClusterInfo; tabId: ConfigTabId }
   | { type: 'network-toggle'; cluster: ClusterInfo }
   | { type: 'network-tab'; cluster: ClusterInfo; tabId: NetworkTabId }
+  | { type: 'rbac-toggle'; cluster: ClusterInfo }
+  | { type: 'rbac-tab'; cluster: ClusterInfo; tabId: RbacTabId }
   | { type: 'nodes'; cluster: ClusterInfo }
   | { type: 'events'; cluster: ClusterInfo }
 
@@ -47,6 +50,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   activeWorkloadTab,
   activeConfigTab,
   activeNetworkTab,
+  activeRbacTab,
   showSettings,
   onToggleCollapse,
   onSelect,
@@ -67,6 +71,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
   const [expandedWorkloads, setExpandedWorkloads] = useState<string[]>([])
   const [expandedConfigs, setExpandedConfigs] = useState<string[]>([])
   const [expandedNetwork, setExpandedNetwork] = useState<string[]>([])
+  const [expandedRbac, setExpandedRbac] = useState<string[]>([])
 
   useEffect(() => {
     const valid = new Set(clusters.map(cluster => cluster.filename))
@@ -74,6 +79,7 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
     setExpandedWorkloads(current => current.filter(filename => valid.has(filename)))
     setExpandedConfigs(current => current.filter(filename => valid.has(filename)))
     setExpandedNetwork(current => current.filter(filename => valid.has(filename)))
+    setExpandedRbac(current => current.filter(filename => valid.has(filename)))
   }, [clusters])
 
   useEffect(() => {
@@ -99,6 +105,12 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       ))
     } else if (activeSection === 'network') {
       setExpandedNetwork(current => (
+        current.includes(activeCluster.filename)
+          ? current
+          : [...current, activeCluster.filename]
+      ))
+    } else if (activeSection === 'rbac') {
+      setExpandedRbac(current => (
         current.includes(activeCluster.filename)
           ? current
           : [...current, activeCluster.filename]
@@ -164,6 +176,14 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
     ))
   }
 
+  const toggleRbac = (filename: string) => {
+    setExpandedRbac(current => (
+      current.includes(filename)
+        ? current.filter(name => name !== filename)
+        : [...current, filename]
+    ))
+  }
+
   const [focusedNavIndex, setFocusedNavIndex] = useState(-1)
   const clusterListRef = useRef<HTMLDivElement | null>(null)
 
@@ -193,10 +213,16 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
             items.push({ type: 'network-tab', cluster: c, tabId: tab.id })
           }
         }
+        items.push({ type: 'rbac-toggle', cluster: c })
+        if (expandedRbac.includes(c.filename)) {
+          for (const tab of RBAC_TAB_OPTIONS) {
+            items.push({ type: 'rbac-tab', cluster: c, tabId: tab.id })
+          }
+        }
       }
     }
     return items
-  }, [filteredClusters, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork])
+  }, [filteredClusters, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork, expandedRbac])
 
   const handleClusterListKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement
@@ -234,6 +260,10 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleNetwork(item.cluster.filename)
       } else if (item.type === 'network-tab') {
         onSelect(item.cluster, 'network', undefined, undefined, item.tabId)
+      } else if (item.type === 'rbac-toggle') {
+        toggleRbac(item.cluster.filename)
+      } else if (item.type === 'rbac-tab') {
+        onSelect(item.cluster, 'rbac', undefined, undefined, undefined, item.tabId)
       } else if (item.type === 'nodes') {
         onSelect(item.cluster, 'nodes')
       } else if (item.type === 'events') {
@@ -252,6 +282,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleConfigs(item.cluster.filename)
       } else if (item.type === 'network-toggle' && !expandedNetwork.includes(item.cluster.filename)) {
         toggleNetwork(item.cluster.filename)
+      } else if (item.type === 'rbac-toggle' && !expandedRbac.includes(item.cluster.filename)) {
+        toggleRbac(item.cluster.filename)
       }
       return
     }
@@ -266,6 +298,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
         toggleConfigs(item.cluster.filename)
       } else if (item.type === 'network-toggle' && expandedNetwork.includes(item.cluster.filename)) {
         toggleNetwork(item.cluster.filename)
+      } else if (item.type === 'rbac-toggle' && expandedRbac.includes(item.cluster.filename)) {
+        toggleRbac(item.cluster.filename)
       } else if (item.type === 'overview' || item.type === 'workloads-toggle') {
         const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
@@ -278,13 +312,16 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
       } else if (item.type === 'network-tab') {
         const parentIdx = navItems.findIndex(n => n.type === 'network-toggle' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
+      } else if (item.type === 'rbac-tab') {
+        const parentIdx = navItems.findIndex(n => n.type === 'rbac-toggle' && n.cluster.filename === item.cluster.filename)
+        if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
       } else if (item.type === 'nodes' || item.type === 'events') {
         const parentIdx = navItems.findIndex(n => n.type === 'cluster' && n.cluster.filename === item.cluster.filename)
         if (parentIdx >= 0) setFocusedNavIndex(parentIdx)
       }
       return
     }
-  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork, toggleCluster, toggleWorkloads, toggleConfigs, toggleNetwork, onSelect])
+  }, [navItems, focusedNavIndex, expandedClusters, expandedWorkloads, expandedConfigs, expandedNetwork, expandedRbac, toggleCluster, toggleWorkloads, toggleConfigs, toggleNetwork, toggleRbac, onSelect])
 
   useEffect(() => {
     if (focusedNavIndex < 0) return
@@ -362,6 +399,8 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                 const configExpanded = expandedConfigs.includes(c.filename)
                 const networkActive = active && activeSection === 'network'
                 const networkExpanded = expandedNetwork.includes(c.filename)
+                const rbacActive = active && activeSection === 'rbac'
+                const rbacExpanded = expandedRbac.includes(c.filename)
                 const nodesActive = active && activeSection === 'nodes'
                 const eventsActive = active && activeSection === 'events'
                 const clusterNavIdx = navIdx++
@@ -569,6 +608,49 @@ const Sidebar = forwardRef<HTMLDivElement, Props>(function Sidebar({
                                   onClick={e => {
                                     e.stopPropagation()
                                     onSelect(c, 'network', undefined, undefined, tab.id)
+                                  }}
+                                >
+                                  <span className="cluster-nav-label">
+                                    <SidebarNavIcon name={tab.id} />
+                                    <span>{tab.label}</span>
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                          {(() => { const idx = navIdx++; return (
+                            <button
+                              type="button"
+                              className={`cluster-sub-item cluster-sub-toggle ${rbacActive ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                              data-nav-focused={focusedNavIndex === idx || undefined}
+                              onClick={e => {
+                                e.stopPropagation()
+                                toggleRbac(c.filename)
+                              }}
+                            >
+                              <span className="cluster-nav-label">
+                                <SidebarNavIcon name="rbac" />
+                                <span>RBAC</span>
+                              </span>
+                              <svg className={`cluster-sub-chevron ${rbacExpanded ? 'open' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path d="M7 5l6 5-6 5V5z" />
+                              </svg>
+                            </button>
+                          )})()}
+                          {rbacExpanded && (
+                          <div className="cluster-config-list">
+                            {RBAC_TAB_OPTIONS.map(tab => {
+                              const idx = navIdx++
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  className={`cluster-config-item ${rbacActive && activeRbacTab === tab.id ? 'active' : ''} ${focusedNavIndex === idx ? 'keyboard-focused' : ''}`}
+                                  data-nav-focused={focusedNavIndex === idx || undefined}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    onSelect(c, 'rbac', undefined, undefined, undefined, tab.id)
                                   }}
                                 >
                                   <span className="cluster-nav-label">

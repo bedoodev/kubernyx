@@ -1521,7 +1521,7 @@ export default function DeploymentDetailPanel({
                             <span className={`pods-tone-pill tone-${valueToneClass(event.type)}`}>{event.type}</span>
                           </td>
                           <td className="pods-detail-value-cell">{event.reason}</td>
-                          <td className="pods-detail-value-cell">{event.message}</td>
+                          <td className="pods-detail-value-cell pods-detail-message-cell">{event.message}</td>
                           <td className="pods-detail-value-cell">{event.count}</td>
                           <td className="pods-detail-value-cell">{event.age}</td>
                         </tr>

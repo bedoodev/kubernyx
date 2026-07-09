@@ -1363,6 +1363,25 @@
   min-width: 520px;
 }
 
+.pods-conditions-table {
+  table-layout: fixed;
+}
+
+.pods-conditions-table th:nth-child(1),
+.pods-conditions-table td:nth-child(1) {
+  width: 34%;
+}
+
+.pods-conditions-table th:nth-child(2),
+.pods-conditions-table td:nth-child(2) {
+  width: 120px;
+}
+
+.pods-conditions-table th:nth-child(3),
+.pods-conditions-table td:nth-child(3) {
+  width: auto;
+}
+
 .pods-detail-card.is-split .pods-detail-table {
   min-width: 100%;
   table-layout: fixed;
@@ -1442,9 +1461,31 @@
   user-select: text;
 }
 
+.pods-detail-message-cell {
+  max-width: none;
+  min-width: 220px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.pods-conditions-table .pods-detail-message-cell {
+  min-width: 0;
+  display: table-cell;
+}
+
 .pods-detail-card.is-split .pods-detail-value-cell {
   min-width: 0;
   max-width: none;
+}
+
+.pods-detail-card.is-split .pods-detail-message-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .pods-detail-value-cell:hover {
@@ -1459,6 +1500,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pods-detail-card.is-split .pods-detail-message-cell:hover {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .pods-detail-card.is-split .pods-detail-table .pods-status-pill,
@@ -2040,10 +2087,7 @@
 }
 
 .pods-meta-owner-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
-  align-items: start;
+  display: block;
 }
 
 .pods-meta-key {
@@ -2073,6 +2117,13 @@
   color: #ffffff;
   font-size: var(--detail-value-size);
   font-weight: var(--detail-value-weight);
+}
+
+.pods-meta-muted-value {
+  display: inline;
+  margin-left: 0.5ch;
+  color: var(--text-muted);
+  font-size: var(--detail-value-size);
 }
 
 .pods-meta-text-value {
@@ -2220,7 +2271,7 @@
 }
 
 .pods-meta-volume-item {
-  align-items: flex-start;
+  display: block;
 }
 
 .pods-meta-volume-detail {

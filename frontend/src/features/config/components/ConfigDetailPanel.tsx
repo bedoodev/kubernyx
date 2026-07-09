@@ -380,7 +380,7 @@ export default function ConfigDetailPanel({
                         <tr key={`${event.reason}-${event.message}-${index}`}>
                           <td className="pods-detail-value-cell">{event.type}</td>
                           <td className="pods-detail-value-cell">{event.reason}</td>
-                          <td className="pods-detail-value-cell">{event.message}</td>
+                          <td className="pods-detail-value-cell pods-detail-message-cell">{event.message}</td>
                           <td className="pods-detail-value-cell">{event.count}</td>
                           <td className="pods-detail-value-cell">{event.age}</td>
                         </tr>

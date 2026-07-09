@@ -218,6 +218,8 @@ func (c *Client) GetPodDetail(ctx context.Context, namespace string, name string
 		})
 	}
 
+	tolerations := podTolerations(pod.Spec.Tolerations)
+
 	events := c.listPodEvents(ctx, pod)
 	manifest := "-"
 	manifestPod := pod.DeepCopy()
@@ -253,6 +255,7 @@ func (c *Client) GetPodDetail(ctx context.Context, namespace string, name string
 		Annotations:      annotations,
 		OwnerReferences:  ownerReferences,
 		Volumes:          volumes,
+		Tolerations:      tolerations,
 		InitContainers:   initContainers,
 		Containers:       containers,
 		Conditions:       conditions,
@@ -365,6 +368,33 @@ func (c *Client) GetPodLogs(ctx context.Context, namespace string, name string, 
 	}
 
 	return result, nil
+}
+
+func podTolerations(tolerations []corev1.Toleration) []string {
+	items := make([]string, 0, len(tolerations))
+	for _, item := range tolerations {
+		parts := make([]string, 0, 5)
+		if item.Key != "" {
+			parts = append(parts, fmt.Sprintf("key=%s", item.Key))
+		}
+		if item.Operator != "" {
+			parts = append(parts, fmt.Sprintf("operator=%s", item.Operator))
+		}
+		if item.Value != "" {
+			parts = append(parts, fmt.Sprintf("value=%s", item.Value))
+		}
+		if item.Effect != "" {
+			parts = append(parts, fmt.Sprintf("effect=%s", item.Effect))
+		}
+		if item.TolerationSeconds != nil {
+			parts = append(parts, fmt.Sprintf("seconds=%d", *item.TolerationSeconds))
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "-")
+		}
+		items = append(items, strings.Join(parts, ", "))
+	}
+	return items
 }
 
 func (c *Client) DeletePod(ctx context.Context, namespace string, name string) error {
