@@ -489,7 +489,7 @@ export default function PodsTable({
             <div className="pods-search-wrap">
               <input
                 className="pods-search"
-                placeholder="Search names or label='app:backend' && pod-name"
+                placeholder="Search names, label=app or annotation=sidecar"
                 value={search}
                 onChange={event => onSearchChange(event.target.value)}
                 autoCorrect="off"

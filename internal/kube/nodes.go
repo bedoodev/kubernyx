@@ -22,6 +22,7 @@ type NodeResource struct {
 	CreatedAtUnix int64             `json:"createdAtUnix"`
 	Age           string            `json:"age"`
 	Labels        map[string]string `json:"labels"`
+	Annotations   map[string]string `json:"annotations"`
 }
 
 type NodeConditionInfo struct {
@@ -101,6 +102,10 @@ func (c *Client) GetNodeResources(ctx context.Context) ([]NodeResource, error) {
 		for k, v := range node.Labels {
 			labelsCopy[k] = v
 		}
+		annotationsCopy := make(map[string]string, len(node.Annotations))
+		for k, v := range node.Annotations {
+			annotationsCopy[k] = v
+		}
 
 		items = append(items, NodeResource{
 			Name:          node.Name,
@@ -113,6 +118,7 @@ func (c *Client) GetNodeResources(ctx context.Context) ([]NodeResource, error) {
 			CreatedAtUnix: node.CreationTimestamp.Time.Unix(),
 			Age:           formatAge(time.Since(node.CreationTimestamp.Time)),
 			Labels:        labelsCopy,
+			Annotations:   annotationsCopy,
 		})
 	}
 

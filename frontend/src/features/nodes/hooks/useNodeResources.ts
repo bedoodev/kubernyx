@@ -28,6 +28,7 @@ function toNodeResources(data: unknown): NodeResource[] {
       createdAtUnix: Number(record.createdAtUnix ?? 0),
       age: String(record.age ?? '-'),
       labels: (record.labels ?? {}) as Record<string, string>,
+      annotations: (record.annotations ?? {}) as Record<string, string>,
     }
   })
 }

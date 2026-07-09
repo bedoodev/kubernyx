@@ -1,11 +1,12 @@
-interface SearchableWorkload {
+interface SearchableResource {
   name: string
   labels?: Record<string, string>
+  annotations?: Record<string, string>
 }
 
 type SearchClause =
   | { type: 'name'; value: string }
-  | { type: 'label'; key: string; value: string }
+  | { type: 'metadata'; field: 'labels' | 'annotations'; value: string }
 
 type SearchExpression = SearchClause[][]
 
@@ -70,22 +71,17 @@ function tokenizeSearch(query: string): string[] {
   return tokens
 }
 
-function parseLabelClause(value: string): SearchClause | null {
-  const match = value.match(/^labels?\s*(?:=|:)(.+)$/i)
-  if (!match) {
-    return null
-  }
+function parseMetadataClause(value: string): SearchClause | null {
+  const match = value.match(/^(labels?|annotations?)\s*(?:=|:)(.+)$/i)
+  if (!match) return null
 
-  const labelValue = stripQuotes(match[1])
-  const separatorIndex = labelValue.search(/[:=]/)
-  if (separatorIndex <= 0 || separatorIndex === labelValue.length - 1) {
-    return null
-  }
+  const metadataValue = stripQuotes(match[2]).toLowerCase()
+  if (!metadataValue) return null
 
   return {
-    type: 'label',
-    key: labelValue.slice(0, separatorIndex).trim().toLowerCase(),
-    value: labelValue.slice(separatorIndex + 1).trim().toLowerCase(),
+    type: 'metadata',
+    field: match[1].toLowerCase().startsWith('annotation') ? 'annotations' : 'labels',
+    value: metadataValue,
   }
 }
 
@@ -102,7 +98,7 @@ function parseClause(token: string): SearchClause | null {
   if (!normalized) {
     return null
   }
-  return parseLabelClause(normalized) ?? parseNameClause(normalized)
+  return parseMetadataClause(normalized) ?? parseNameClause(normalized)
 }
 
 function parseSearchExpression(query: string): SearchExpression {
@@ -130,13 +126,20 @@ function parseSearchExpression(query: string): SearchExpression {
   return expression.filter(group => group.length > 0)
 }
 
-function matchesLabel(labels: Record<string, string> | undefined, key: string, value: string): boolean {
-  if (!labels) {
+function matchesMetadata(metadata: Record<string, string> | undefined, query: string): boolean {
+  if (!metadata) {
     return false
   }
 
-  for (const [labelKey, labelValue] of Object.entries(labels)) {
-    if (labelKey.toLowerCase() === key && labelValue.toLowerCase() === value) {
+  for (const [key, value] of Object.entries(metadata)) {
+    const normalizedKey = key.toLowerCase()
+    const normalizedValue = value.toLowerCase()
+    if (
+      normalizedKey.includes(query)
+      || normalizedValue.includes(query)
+      || `${normalizedKey}=${normalizedValue}`.includes(query)
+      || `${normalizedKey}:${normalizedValue}`.includes(query)
+    ) {
       return true
     }
   }
@@ -144,14 +147,14 @@ function matchesLabel(labels: Record<string, string> | undefined, key: string, v
   return false
 }
 
-function matchesClause(item: SearchableWorkload, clause: SearchClause): boolean {
-  if (clause.type === 'label') {
-    return matchesLabel(item.labels, clause.key, clause.value)
+function matchesClause(item: SearchableResource, clause: SearchClause): boolean {
+  if (clause.type === 'metadata') {
+    return matchesMetadata(item[clause.field], clause.value)
   }
   return item.name.toLowerCase().includes(clause.value)
 }
 
-export function createWorkloadSearchMatcher(query: string): (item: SearchableWorkload) => boolean {
+export function createResourceSearchMatcher(query: string): (item: SearchableResource) => boolean {
   const trimmed = query.trim()
   if (!trimmed) {
     return () => true
@@ -164,4 +167,8 @@ export function createWorkloadSearchMatcher(query: string): (item: SearchableWor
   }
 
   return item => expression.some(group => group.every(clause => matchesClause(item, clause)))
+}
+
+export function createWorkloadSearchMatcher(query: string): (item: SearchableResource) => boolean {
+  return createResourceSearchMatcher(query)
 }

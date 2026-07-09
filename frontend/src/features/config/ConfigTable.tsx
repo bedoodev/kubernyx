@@ -6,6 +6,7 @@ import { formatAgeFromUnix } from '../../shared/utils/formatting'
 import { toBatchDeleteResult } from '../../shared/utils/normalization'
 import { configPluralLabel, configSingularLabel, toConfigAPIKind, type ImplementedConfigTabId } from './configKinds'
 import { useConfigResources } from './hooks/useConfigResources'
+import { createResourceSearchMatcher } from '../workloads/shared/workloadSearch'
 import '../workloads/pods/PodsTable.css'
 
 interface Props {
@@ -87,6 +88,7 @@ export default function ConfigTable({
   const columns = configTab === 'secrets' ? SECRET_COLUMNS : CONFIG_MAP_COLUMNS
   const tableMinWidth = SELECT_COLUMN_WIDTH + (configTab === 'secrets' ? SECRET_MIN_TABLE_WIDTH : CONFIG_MAP_MIN_TABLE_WIDTH)
   const pluralLabel = configPluralLabel(configTab)
+  const resourceSearchMatcher = useMemo(() => createResourceSearchMatcher(search), [search])
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -100,8 +102,9 @@ export default function ConfigTable({
       || item.type.toLowerCase().includes(query)
       || Object.entries(item.labels ?? {}).some(([key, value]) => key.toLowerCase().includes(query) || value.toLowerCase().includes(query))
       || Object.entries(item.annotations ?? {}).some(([key, value]) => key.toLowerCase().includes(query) || value.toLowerCase().includes(query))
+      || resourceSearchMatcher(item)
     ))
-  }, [items, search])
+  }, [items, resourceSearchMatcher, search])
 
   const sortedItems = useMemo(() => {
     const direction = sortDir === 'asc' ? 1 : -1
@@ -249,7 +252,7 @@ export default function ConfigTable({
             </div>
             <input
               className="pods-search"
-              placeholder="Search by name, namespace, key count or type"
+              placeholder="Search by name, namespace, label or annotation"
               value={search}
               onChange={event => onSearchChange(event.target.value)}
               autoCorrect="off"

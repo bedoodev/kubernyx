@@ -6,6 +6,7 @@ import { formatAgeFromUnix } from '../../shared/utils/formatting'
 import { toBatchDeleteResult } from '../../shared/utils/normalization'
 import { networkPluralLabel, networkSingularLabel, toNetworkAPIKind } from './networkKinds'
 import { useNetworkResources } from './hooks/useNetworkResources'
+import { createResourceSearchMatcher } from '../workloads/shared/workloadSearch'
 import '../workloads/pods/PodsTable.css'
 
 interface Props {
@@ -83,6 +84,7 @@ export default function NetworkTable({
 
   const columns = networkTab === 'ingress' ? INGRESS_COLUMNS : SERVICE_COLUMNS
   const pluralLabel = networkPluralLabel(networkTab)
+  const resourceSearchMatcher = useMemo(() => createResourceSearchMatcher(search), [search])
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -92,8 +94,9 @@ export default function NetworkTable({
       || item.namespace.toLowerCase().includes(query)
       || (item.pods ?? '').toLowerCase().includes(query)
       || (item.status ?? '').toLowerCase().includes(query)
+      || resourceSearchMatcher(item)
     ))
-  }, [items, search])
+  }, [items, resourceSearchMatcher, search])
 
   const sortedItems = useMemo(() => {
     const direction = sortDir === 'asc' ? 1 : -1
@@ -222,7 +225,7 @@ export default function NetworkTable({
             </div>
             <input
               className="pods-search"
-              placeholder={`Search ${pluralLabel.toLowerCase()}...`}
+              placeholder={`Search ${pluralLabel.toLowerCase()}, labels or annotations...`}
               value={search}
               onChange={event => onSearchChange(event.target.value)}
               autoCorrect="off"

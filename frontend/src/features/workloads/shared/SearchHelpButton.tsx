@@ -52,7 +52,7 @@ export default function SearchHelpButton({ entityLabel }: Props) {
       {open && (
         <div className="pods-search-help-popover" role="dialog" aria-label="Search help">
           <strong>Search syntax</strong>
-          <p>Plain text matches {entityLabel} names only.</p>
+          <p>Plain text matches {entityLabel} names. Label and annotation searches match partial keys, values, key=value, and key:value.</p>
           <dl>
             <div>
               <dt>Name</dt>
@@ -60,15 +60,19 @@ export default function SearchHelpButton({ entityLabel }: Props) {
             </div>
             <div>
               <dt>Label</dt>
-              <dd><code>label='app:backend'</code></dd>
+              <dd><code>label='app=backend'</code></dd>
+            </div>
+            <div>
+              <dt>Annotation</dt>
+              <dd><code>annotation=sidecar</code></dd>
             </div>
             <div>
               <dt>AND</dt>
-              <dd><code>label='team:infra' && datainfra</code></dd>
+              <dd><code>label=team:infra && datainfra</code></dd>
             </div>
             <div>
               <dt>OR</dt>
-              <dd><code>label='app:api' || label='app:web'</code></dd>
+              <dd><code>label=api || annotation=webhook</code></dd>
             </div>
           </dl>
         </div>

@@ -3,6 +3,7 @@ import type { ClusterInfo, NodeResource } from '../../shared/types'
 import { useScopedSearch } from '../../shared/hooks/useScopedSearch'
 import { formatAgeFromUnix } from '../../shared/utils/formatting'
 import { useNodeResources } from './hooks/useNodeResources'
+import { createResourceSearchMatcher } from '../workloads/shared/workloadSearch'
 import '../workloads/pods/PodsTable.css'
 
 interface Props {
@@ -52,6 +53,8 @@ export default function NodesView({ cluster, activeNodeKey, onNodeActivate }: Pr
     return () => window.clearInterval(tick)
   }, [])
 
+  const resourceSearchMatcher = useMemo(() => createResourceSearchMatcher(search), [search])
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return items
@@ -60,8 +63,9 @@ export default function NodesView({ cluster, activeNodeKey, onNodeActivate }: Pr
       || item.role.toLowerCase().includes(query)
       || item.status.toLowerCase().includes(query)
       || item.version.toLowerCase().includes(query)
+      || resourceSearchMatcher(item)
     ))
-  }, [items, search])
+  }, [items, resourceSearchMatcher, search])
 
   const sortedItems = useMemo(() => {
     const direction = sortDir === 'asc' ? 1 : -1
@@ -119,7 +123,7 @@ export default function NodesView({ cluster, activeNodeKey, onNodeActivate }: Pr
                 </div>
                 <input
                   className="pods-search"
-                  placeholder="Search nodes..."
+                  placeholder="Search nodes, labels or annotations..."
                   value={search}
                   onChange={event => setSearch(event.target.value)}
                   autoCorrect="off"

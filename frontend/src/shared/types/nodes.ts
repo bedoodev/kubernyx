@@ -9,6 +9,7 @@ export interface NodeResource {
   createdAtUnix?: number;
   age?: string;
   labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface NodeConditionInfo {

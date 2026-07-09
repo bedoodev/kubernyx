@@ -595,7 +595,7 @@ export default function DeploymentsTable({
             <div className="pods-search-wrap">
               <input
                 className="pods-search"
-                placeholder="Search names or label='app:backend' && workload-name"
+                placeholder="Search names, label=app or annotation=sidecar"
                 value={search}
                 onChange={event => onSearchChange(event.target.value)}
                 autoCorrect="off"
