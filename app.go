@@ -431,6 +431,15 @@ func (a *App) GetClusterEvents(filename string, namespaces []string) ([]kube.Clu
 	return client.GetEvents(a.ctx, namespaces)
 }
 
+// GetRbacResources returns RBAC resources for the given kind and namespaces.
+func (a *App) GetRbacResources(filename string, kind string, namespaces []string) ([]kube.RbacResource, error) {
+	client, err := a.newTempClient(filename)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetRbacResources(a.ctx, kind, namespaces)
+}
+
 // RestartWorkload restarts a workload (deployment/statefulset/daemonset) with a rollout restart.
 func (a *App) RestartWorkload(filename string, kind string, namespace string, name string) error {
 	client, err := a.newTempClient(filename)

@@ -90,6 +90,10 @@ export function GetPodLogs(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetPodLogs'](arg1, arg2, arg3, arg4);
 }
 
+export function GetRbacResources(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetRbacResources'](arg1, arg2, arg3);
+}
+
 export function GetWorkloadDetails(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetWorkloadDetails'](arg1, arg2, arg3, arg4);
 }

@@ -40,6 +40,7 @@ export {
   GetNodeDetail,
   DebugNode,
   GetClusterEvents,
+  GetRbacResources,
   RestartWorkload,
 } from '../../../wailsjs/go/main/App'
 

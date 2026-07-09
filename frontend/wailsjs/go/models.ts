@@ -1,10 +1,10 @@
 export namespace cluster {
-	
+
 	export class ClusterInfo {
 	    name: string;
 	    filename: string;
 	    healthStatus: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ClusterInfo(source);
 	    }
@@ -704,6 +704,7 @@ export namespace kube {
 	    createdAtUnix: number;
 	    age: string;
 	    labels: Record<string, string>;
+	    annotations: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new NodeResource(source);
@@ -721,6 +722,7 @@ export namespace kube {
 	        this.createdAtUnix = source["createdAtUnix"];
 	        this.age = source["age"];
 	        this.labels = source["labels"];
+	        this.annotations = source["annotations"];
 	    }
 	}
 	
@@ -786,6 +788,7 @@ export namespace kube {
 	    annotations: Record<string, string>;
 	    ownerReferences: PodDetailOwnerReference[];
 	    volumes: PodDetailVolume[];
+	    tolerations: string[];
 	    initContainers: PodDetailContainer[];
 	    containers: PodDetailContainer[];
 	    conditions: PodDetailCondition[];
@@ -824,6 +827,7 @@ export namespace kube {
 	        this.annotations = source["annotations"];
 	        this.ownerReferences = this.convertValues(source["ownerReferences"], PodDetailOwnerReference);
 	        this.volumes = this.convertValues(source["volumes"], PodDetailVolume);
+	        this.tolerations = source["tolerations"];
 	        this.initContainers = this.convertValues(source["initContainers"], PodDetailContainer);
 	        this.containers = this.convertValues(source["containers"], PodDetailContainer);
 	        this.conditions = this.convertValues(source["conditions"], PodDetailCondition);
@@ -894,6 +898,40 @@ export namespace kube {
 	        this.createdAt = source["createdAt"];
 	        this.createdAtUnix = source["createdAtUnix"];
 	        this.message = source["message"];
+	    }
+	}
+	export class RbacResource {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    roleRef: string;
+	    subjects: string;
+	    subjectCount: number;
+	    rules: number;
+	    apiGroups: string;
+	    resources: string;
+	    verbs: string;
+	    age: string;
+	    createdAtUnix: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RbacResource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.roleRef = source["roleRef"];
+	        this.subjects = source["subjects"];
+	        this.subjectCount = source["subjectCount"];
+	        this.rules = source["rules"];
+	        this.apiGroups = source["apiGroups"];
+	        this.resources = source["resources"];
+	        this.verbs = source["verbs"];
+	        this.age = source["age"];
+	        this.createdAtUnix = source["createdAtUnix"];
 	    }
 	}
 	
@@ -1099,4 +1137,3 @@ export namespace terminal {
 	}
 
 }
-
